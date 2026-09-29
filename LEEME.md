@@ -65,4 +65,4 @@ destinatarios y correos. Hazlo periódicamente.
 ## Pruebas
 
 `tests/web/e2e.mjs` (en el repositorio privado) recorre portal y panel con el emulador oficial de Firebase
-y las mismas reglas de seguridad: 29 de 29 verificaciones correctas.
+y las mismas reglas de seguridad: 30 de 30 verificaciones correctas.
