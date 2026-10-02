@@ -243,64 +243,82 @@ window.API = API;
 
       var feedback = h('div');
       var enviar = h('button', { class: 'btn btn-pri', type: 'submit' }, 'Enviar solicitud');
-      var form = h('form', { novalidate: true },
-        h('h1', null, 'Nueva solicitud'),
-        h('p', { class: 'gris' }, 'Los campos con * son obligatorios. Tus datos de contacto se recuerdan en este equipo para la próxima vez.'),
-        h('section', { class: 'tarjeta' }, h('h2', null, h('span', { class: 'num' }, '1'), 'Quién solicita'),
+      var cancelar = function () { if (cfg.sesion) misSolicitudes(); else inicio(); };
+
+      /* Formulario por pasos: una sección por pantalla, con barra de avance. */
+      var pasoTipo = h('section', { class: 'tarjeta paso' }, h('h2', null, '¿Qué necesitas mover?'),
+        h('p', { class: 'gris chico' }, 'Elige el tipo de movimiento.'), h('div', { class: 'rejilla' }, opciones('tipo', 'Tipo de movimiento', cfg.tipos, { req: true })));
+      var pasoDetalles = h('div', { class: 'paso' }, h('section', { class: 'tarjeta' }, h('h2', null, 'Detalles'),
+        h('div', { class: 'rejilla' },
+          opciones('prioridad', 'Prioridad', [['Normal', 'Normal', ''], ['Urgente', 'Urgente', 'Menos de 48 horas; explica el motivo.']], { req: true }),
+          opciones('forma_envio', 'Forma de envío', cfg.formas_envio.map(function (f) {
+            return [f, f, f === cfg.paqueteria ? 'Te pediremos las medidas y el peso de los paquetes.' : ''];
+          }), { req: true }),
+          texto('motivo', 'Motivo y detalles', { req: true, area: true, max: 2000, todo: true, ayuda: 'Qué se va a mover, cuánto y por qué. Mientras más claro, más rápido lo programamos.' }),
+          texto('cliente', 'Cliente relacionado', { max: 160, ayuda: 'Opcional.' }),
+          texto('referencia', 'Pedido, factura, nota de crédito o RMA', { max: 120, ayuda: 'Opcional.' }),
+          texto('horario', 'Horario de atención en sitio', { max: 80, todo: true, ayuda: 'Opcional. Ejemplo: lunes a viernes de 9:00 a 14:00.' }))),
+        seccionPaquetes);
+      seccionDevolucion.hidden = false;
+      var pasoDevolucion = h('div', { class: 'paso' }, seccionDevolucion);
+      var pasoRuta = h('section', { class: 'tarjeta paso' }, h('h2', null, 'Origen y destino'),
+        h('div', { class: 'rejilla' },
+          h('h3', { class: 'todo', style: 'margin:0' }, 'Origen · dónde recogemos'),
+          texto('origen_nombre', 'Lugar o empresa', { req: true, ayuda: 'En devoluciones, normalmente es el cliente.' }),
+          texto('origen_ciudad', 'Ciudad y estado', { req: true, max: 120 }),
+          texto('origen_direccion', 'Calle, número, colonia y CP', { req: true, max: 240, todo: true }),
+          texto('origen_contacto', 'Contacto y teléfono en origen', { todo: true, ayuda: 'Opcional.' }),
+          h('h3', { class: 'todo', style: 'margin:8px 0 0' }, 'Destino · a dónde lo llevamos'),
+          texto('destino_nombre', 'Lugar o empresa', { req: true }),
+          texto('destino_ciudad', 'Ciudad y estado', { req: true, max: 120 }),
+          texto('destino_direccion', 'Calle, número, colonia y CP', { req: true, max: 240, todo: true }),
+          texto('destino_contacto', 'Contacto y teléfono en destino', { todo: true, ayuda: 'Opcional.' })));
+      var pasoDatos = h('div', { class: 'paso' },
+        h('section', { class: 'tarjeta' }, h('h2', null, 'Tus datos'),
+          h('p', { class: 'gris chico' }, 'Se recuerdan en este equipo para la próxima vez.'),
           h('div', { class: 'rejilla' },
             texto('solicitante', 'Nombre completo', { req: true, max: 120, auto: 'name', recordar: true }),
             lista('area', 'Área', cfg.areas, { req: true, recordar: true }),
             texto('correo', 'Correo', { req: true, tipo: 'email', auto: 'email', recordar: true }),
             texto('telefono', 'Teléfono o extensión', { req: true, tipo: 'tel', max: 40, auto: 'tel', recordar: true }),
             texto('autoriza', 'Autoriza (jefe o responsable)', { max: 120, ayuda: 'Opcional.', recordar: true }))),
-        h('section', { class: 'tarjeta' }, h('h2', null, h('span', { class: 'num' }, '2'), 'Qué necesitas'),
-          h('div', { class: 'rejilla' },
-            opciones('tipo', 'Tipo de movimiento', cfg.tipos, { req: true }),
-            opciones('prioridad', 'Prioridad', [['Normal', 'Normal', ''], ['Urgente', 'Urgente', 'Menos de 48 horas; explica el motivo.']], { req: true }),
-            opciones('forma_envio', 'Forma de envío', cfg.formas_envio.map(function (f) {
-              return [f, f, f === cfg.paqueteria ? 'Te pediremos las medidas y el peso de los paquetes.' : ''];
-            }), { req: true }),
-            texto('horario', 'Horario de atención en sitio', { max: 80, ayuda: 'Ejemplo: lunes a viernes de 9:00 a 14:00.' }),
-            texto('cliente', 'Cliente relacionado', { max: 160 }),
-            texto('referencia', 'Pedido, factura, nota de crédito o RMA', { max: 120 }),
-            texto('motivo', 'Motivo y detalles', { req: true, area: true, max: 2000, todo: true, ayuda: 'Qué se va a mover, cuánto y por qué. Mientras más claro, más rápido lo programamos.' }))),
-        seccionDevolucion,
-        seccionPaquetes,
-        h('section', { class: 'tarjeta' }, h('h2', null, h('span', { class: 'num' }, '3'), 'Origen y destino'),
-          h('div', { class: 'rejilla' },
-            h('h3', { class: 'todo', style: 'margin:0' }, 'Origen · dónde recogemos'),
-            texto('origen_nombre', 'Lugar o empresa', { req: true, ayuda: 'En devoluciones, normalmente es el cliente.' }),
-            texto('origen_ciudad', 'Ciudad y estado', { req: true, max: 120 }),
-            texto('origen_direccion', 'Calle, número, colonia y CP', { req: true, max: 240, todo: true }),
-            texto('origen_contacto', 'Contacto y teléfono en origen', { todo: true }),
-            h('h3', { class: 'todo', style: 'margin:8px 0 0' }, 'Destino · a dónde lo llevamos'),
-            texto('destino_nombre', 'Lugar o empresa', { req: true }),
-            texto('destino_ciudad', 'Ciudad y estado', { req: true, max: 120 }),
-            texto('destino_direccion', 'Calle, número, colonia y CP', { req: true, max: 240, todo: true }),
-            texto('destino_contacto', 'Contacto y teléfono en destino', { todo: true }))),
-        h('section', { class: 'tarjeta' }, h('h2', null, h('span', { class: 'num' }, '4'), 'Archivos (opcional)'),
+        h('section', { class: 'tarjeta' }, h('h2', null, 'Archivos (opcional)'),
           h('div', { class: 'rejilla' }, selector('archivos', 'Factura, autorización, lista de empaque u otros', generales, '.pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.docx',
-            { ayuda: 'PDF, imagen, Excel o Word de hasta ' + cfg.max_mb + ' MB cada uno.' }))),
-        feedback,
-        h('div', { class: 'acciones' }, enviar, h('button', { class: 'btn', type: 'button', onclick: function () { if (cfg.sesion) misSolicitudes(); else inicio(); } }, 'Cancelar')));
-      if (cfg.sesion) {
-        campos.correo.control.value = cfg.sesion.correo;
-        campos.correo.control.readOnly = true;
-        campos.correo.wrap.querySelector('label').appendChild(h('span', { class: 'gris' }, ' (tu correo de acceso)'));
+            { ayuda: 'PDF, imagen, Excel o Word de hasta ' + cfg.max_mb + ' MB cada uno.' }))));
+
+      var PASOS = [
+        { titulo: 'Qué necesitas', el: pasoTipo },
+        { titulo: 'Detalles', el: pasoDetalles },
+        { titulo: 'Devolución', el: pasoDevolucion, aplica: function () { return valor('tipo') === 'devolucion'; } },
+        { titulo: 'Origen y destino', el: pasoRuta },
+        { titulo: 'Tus datos y envío', el: pasoDatos }
+      ];
+      var paso = 0;
+      var avance = h('div', { class: 'avance', 'aria-live': 'polite' });
+      var anterior = h('button', { class: 'btn', type: 'button' }, '← Anterior');
+      var siguiente = h('button', { class: 'btn btn-pri', type: 'button' }, 'Siguiente →');
+      function activos() { return PASOS.filter(function (x) { return !x.aplica || x.aplica(); }); }
+      function mostrar(i) {
+        var lista = activos();
+        paso = Math.max(0, Math.min(i, lista.length - 1));
+        PASOS.forEach(function (x) { x.el.hidden = x !== lista[paso]; });
+        var ultimo = paso === lista.length - 1;
+        mount(avance, h('div', { class: 'avance-txt' }, h('b', null, 'Paso ' + (paso + 1) + ' de ' + lista.length), ' · ' + lista[paso].titulo),
+          h('div', { class: 'avance-barra' }, lista.map(function (x, k) { return h('span', { class: k <= paso ? 'hecho' : '' }); })));
+        anterior.hidden = paso === 0;
+        siguiente.hidden = ultimo;
+        enviar.hidden = !ultimo;
+        if (!ultimo && !claveCuenta) mount(feedback);
+        window.scrollTo(0, 0);
       }
-
-      campos.tipo.control.addEventListener('change', function () { seccionDevolucion.hidden = valor('tipo') !== 'devolucion'; });
-      campos.forma_envio.control.addEventListener('change', function () { seccionPaquetes.hidden = valor('forma_envio') !== cfg.paqueteria; });
-      campos.dev_checklist.control.addEventListener('change', revisarChecklist);
-      revisarChecklist();
-
-      form.addEventListener('submit', function (ev) {
-        ev.preventDefault();
+      /* Revisa los campos (de un paso o de todos). Devuelve los datos y los campos con error. */
+      function revisar(dentroDe) {
         var datos = {}, faltan = [], devolucion = valor('tipo') === 'devolucion', paqueteria = valor('forma_envio') === cfg.paqueteria;
         Object.keys(campos).forEach(function (k) {
           var c = campos[k], v = c.archivos ? c.archivos : (c.leer ? c.leer() : valor(k)), msg = '';
           var aplica = !c.solo || (c.solo === 'devolucion' && devolucion) || (c.solo === 'paqueteria' && paqueteria);
           if (!c.archivos) datos[k] = aplica ? v : (c.leer ? [] : '');
+          if (dentroDe && !dentroDe.contains(c.wrap)) return;
           if (aplica && c.leer) { if (!v.length || !v.every(paqueteValido)) msg = 'Completa cantidad, largo, ancho, alto y peso de cada paquete (números mayores a cero).'; }
           else if (aplica && c.req && (!v || (Array.isArray(v) && !v.length))) msg = c.archivos ? 'Agrega al menos una foto o video.' : 'Obligatorio.';
           else if (k === 'correo' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) msg = 'Escribe un correo válido.';
@@ -308,11 +326,47 @@ window.API = API;
           c.wrap.classList.toggle('invalido', !!msg);
           if (msg) faltan.push(c.wrap);
         });
+        return { datos: datos, faltan: faltan, devolucion: devolucion };
+      }
+      function enfocar(wrap) {
+        wrap.scrollIntoView({ block: 'center' });
+        var ctl = wrap.querySelector('input, select, textarea');
+        if (ctl) ctl.focus({ preventScroll: true });
+      }
+      anterior.addEventListener('click', function () { mostrar(paso - 1); });
+      siguiente.addEventListener('click', function () {
+        var r = revisar(activos()[paso].el);
+        if (r.faltan.length) { enfocar(r.faltan[0]); return; }
+        mostrar(paso + 1);
+      });
+
+      var form = h('form', { novalidate: true },
+        h('h1', null, 'Nueva solicitud'), avance,
+        pasoTipo, pasoDetalles, pasoDevolucion, pasoRuta, pasoDatos,
+        feedback,
+        h('div', { class: 'acciones pasos-acciones' }, anterior, siguiente, enviar, h('span', { class: 'espacio' }),
+          h('button', { class: 'liga', type: 'button', onclick: cancelar }, 'Cancelar')));
+      if (cfg.sesion) {
+        campos.correo.control.value = cfg.sesion.correo;
+        campos.correo.control.readOnly = true;
+        campos.correo.wrap.querySelector('label').appendChild(h('span', { class: 'gris' }, ' (tu correo de acceso)'));
+      }
+
+      /* Al elegir el tipo se avanza solo al siguiente paso. */
+      campos.tipo.control.addEventListener('change', function () { setTimeout(function () { if (paso === 0) mostrar(1); }, 250); });
+      campos.forma_envio.control.addEventListener('change', function () { seccionPaquetes.hidden = valor('forma_envio') !== cfg.paqueteria; });
+      campos.dev_checklist.control.addEventListener('change', revisarChecklist);
+      revisarChecklist();
+      mostrar(0);
+
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var r = revisar(null), datos = r.datos, faltan = r.faltan, devolucion = r.devolucion;
         if (faltan.length) {
+          var lista = activos();
+          for (var k = 0; k < lista.length; k++) if (lista[k].el.contains(faltan[0])) { mostrar(k); break; }
           mount(feedback, h('div', { class: 'aviso aviso-mal', role: 'alert' }, h('p', null, faltan.length === 1 ? 'Revisa el campo marcado en rojo.' : 'Revisa los ' + faltan.length + ' campos marcados en rojo.')));
-          faltan[0].scrollIntoView({ block: 'center' });
-          var ctl = faltan[0].querySelector('input, select, textarea');
-          if (ctl) ctl.focus({ preventScroll: true });
+          enfocar(faltan[0]);
           return;
         }
         try { localStorage.setItem(GUARDADO, JSON.stringify({ solicitante: datos.solicitante, area: datos.area, correo: datos.correo, telefono: datos.telefono, autoriza: datos.autoriza })); } catch (e) { /* sin almacenamiento */ }

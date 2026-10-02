@@ -168,3 +168,14 @@ td .sub { font-size: 12px; color: var(--gris); }
   .tarjeta { padding: 16px; }
   .pasos div { font-size: 10px; }
 }
+
+/* formulario por pasos */
+.avance { margin: 0 0 16px; }
+.avance-txt { font-size: 14px; margin-bottom: 6px; }
+.avance-barra { display: flex; gap: 4px; }
+.avance-barra span { flex: 1; height: 6px; border-radius: 3px; background: var(--linea); }
+.avance-barra span.hecho { background: var(--naranja); }
+.pasos-acciones { position: sticky; bottom: 0; z-index: 5; background: var(--fondo); padding-block: 12px; border-top: 1px solid var(--linea); }
+.pasos-acciones .espacio { flex: 1; }
+.paso .opcion span { padding: 14px 14px; }
+.paso .opcion span b { font-size: 15px; }
