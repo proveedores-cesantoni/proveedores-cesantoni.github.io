@@ -106,5 +106,102 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if isAdmin();
     }
+
+    // ================================================================== Solicitudes de movimientos (colecciones sm_)
+    // Plataforma aparte (carpeta solicitudes/): no lee ni escribe nada de las colecciones pv_ de proveedores.
+    function smYo() { return get(/databases/$(database)/documents/sm_admins/$(request.auth.uid)).data; }
+    function smStaff() { return signedIn() && exists(/databases/$(database)/documents/sm_admins/$(request.auth.uid)) && smYo().activo == true; }
+    function smAdmin() { return smStaff() && smYo().rol == 'admin'; }
+    function smSol(f) { return get(/databases/$(database)/documents/sm_solicitudes/$(f)).data; }
+    function smSolDespues(f) { return getAfter(/databases/$(database)/documents/sm_solicitudes/$(f)).data; }
+    function smDueno(f) { return signedIn() && smSol(f).uid == request.auth.uid; }
+    function smAbierta(f) { return smSol(f).estado in ['recibida', 'en_revision', 'informacion', 'programada', 'en_transito']; }
+    function smNueva(f) {
+      return existsAfter(/databases/$(database)/documents/sm_solicitudes/$(f)) && !exists(/databases/$(database)/documents/sm_solicitudes/$(f));
+    }
+    function smInicioNuevo() {
+      return !exists(/databases/$(database)/documents/sm_config/inicio) && existsAfter(/databases/$(database)/documents/sm_config/inicio);
+    }
+
+    match /sm_config/inicio {
+      allow get: if true;
+      allow create: if signedIn() && getAfter(/databases/$(database)/documents/sm_admins/$(request.auth.uid)).data.rol == 'admin';
+    }
+    // Correos que reciben los avisos de solicitudes nuevas (los lee el navegador que manda el aviso).
+    match /sm_config/avisos {
+      allow get: if signedIn();
+      allow create, update: if smAdmin() || (signedIn() && smInicioNuevo());
+    }
+    // Folio consecutivo SOL-0001…: solo sube de uno en uno y siempre junto con el alta de esa solicitud.
+    match /sm_config/folio {
+      allow get: if signedIn();
+      allow create: if signedIn() && request.resource.data.keys().hasOnly(['n', 'ultimo']) && request.resource.data.n == 1 && smNueva(request.resource.data.ultimo);
+      allow update: if signedIn() && request.resource.data.keys().hasOnly(['n', 'ultimo']) && request.resource.data.n == resource.data.n + 1 &&
+        smNueva(request.resource.data.ultimo);
+    }
+
+    match /sm_admins/{uid} {
+      allow read: if smStaff() || isOwner(uid);
+      allow create: if smAdmin() ||
+        (isOwner(uid) && request.resource.data.rol == 'admin' && request.resource.data.activo == true && smInicioNuevo()) ||
+        (isOwner(uid) && exists(/databases/$(database)/documents/sm_invitaciones/$(request.auth.token.email)) &&
+         request.resource.data.activo == true && request.resource.data.cambiar_clave == false &&
+         request.resource.data.correo == request.auth.token.email &&
+         request.resource.data.rol == get(/databases/$(database)/documents/sm_invitaciones/$(request.auth.token.email)).data.rol);
+      allow update: if smAdmin() || (isOwner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cambiar_clave', 'ultimo_acceso']));
+    }
+    // Personal invitado que ya tenía cuenta (por ejemplo, del panel de proveedores): entra con su misma contraseña.
+    match /sm_invitaciones/{correo} {
+      allow get: if smAdmin() || (signedIn() && request.auth.token.email == correo);
+      allow list, create: if smAdmin();
+      allow delete: if smAdmin() || (signedIn() && request.auth.token.email == correo);
+    }
+
+    match /sm_solicitudes/{f} {
+      allow read: if smStaff() || (signedIn() && resource.data.uid == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.folio == f &&
+        request.resource.data.estado == 'recibida' && request.resource.data.correo == request.auth.token.email.lower() &&
+        request.resource.data.n == getAfter(/databases/$(database)/documents/sm_config/folio).data.n &&
+        getAfter(/databases/$(database)/documents/sm_config/folio).data.ultimo == f &&
+        request.resource.data.keys().hasOnly(['solicitante', 'area', 'correo', 'telefono', 'autoriza', 'tipo', 'prioridad', 'forma_envio',
+          'horario', 'cliente', 'referencia', 'motivo', 'dev_motivo', 'dev_checklist', 'origen_nombre', 'origen_direccion', 'origen_ciudad',
+          'origen_contacto', 'destino_nombre', 'destino_direccion', 'destino_ciudad', 'destino_contacto', 'folio', 'n', 'uid', 'estado',
+          'creada', 'actualizada', 'cerrada', 'dev_cumple', 'paquetes', 'paq_total', 'paq_peso_kg', 'paq_vol_kg']);
+      // Quien solicita solo puede responder (Falta información → En revisión) o cancelar mientras no esté programada.
+      allow update: if smStaff() || (signedIn() && resource.data.uid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'actualizada', 'cerrada']) &&
+        (request.resource.data.estado == resource.data.estado ||
+         (resource.data.estado == 'informacion' && request.resource.data.estado == 'en_revision') ||
+         (resource.data.estado in ['recibida', 'en_revision', 'informacion'] && request.resource.data.estado == 'cancelada')));
+      allow delete: if smAdmin();
+
+      // Mensajes: quien solicita solo ve los visibles; las notas internas son del personal.
+      match /seguimiento/{id} {
+        allow read: if smStaff() || (smDueno(f) && resource.data.visible == true);
+        allow create: if smStaff() || (signedIn() && smSolDespues(f).uid == request.auth.uid &&
+          request.resource.data.visible == true && request.resource.data.autor_tipo == 'solicitante');
+        allow delete: if smAdmin();
+      }
+      match /interno/{d} {
+        allow read, write: if smStaff();
+      }
+      match /archivos/{id} {
+        allow read: if smStaff() || smDueno(f);
+        allow create: if smStaff() || (smDueno(f) && smAbierta(f) && request.resource.data.partes is int);
+        allow delete: if smAdmin();
+        match /partes/{n} {
+          allow read: if smStaff() || smDueno(f);
+          allow create: if (smStaff() || (smDueno(f) && smAbierta(f))) && request.resource.data.d is string && request.resource.data.d.size() <= 700000;
+          allow delete: if smAdmin();
+        }
+      }
+    }
+
+    // Bitácora de correos de solicitudes.
+    match /sm_correos/{id} {
+      allow create: if signedIn();
+      allow read, update: if smStaff();
+      allow delete: if smAdmin();
+    }
   }
 }

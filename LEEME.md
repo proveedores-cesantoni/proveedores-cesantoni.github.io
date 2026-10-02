@@ -78,3 +78,35 @@ destinatarios y correos. Hazlo periódicamente.
 
 `tests/web/e2e.mjs` (en el repositorio privado) recorre portal y panel con el emulador oficial de Firebase
 y las mismas reglas de seguridad: 33 de 33 verificaciones correctas.
+
+---
+
+# Solicitudes de movimientos (carpeta `solicitudes/`)
+
+Plataforma aparte para que las áreas (Customer Service, Mercadotecnia, Ventas, Calidad…) pidan a Logística devoluciones,
+recolecciones, envíos, traslados, movimientos de Mercadotecnia, renta de unidad y maniobras, y les den seguimiento.
+
+| Liga | Para quién |
+|---|---|
+| `https://proveedores-cesantoni.github.io/solicitudes/` | Áreas que piden movimientos (formulario y «Mis solicitudes») |
+| `https://proveedores-cesantoni.github.io/solicitudes/admin.html` | Logística (base y seguimiento) |
+
+- **Base separada:** colecciones `sm_` en el mismo proyecto de Firebase. No lee ni escribe nada de `pv_` (proveedores) y tiene su propio personal.
+- **Quien solicita:** al mandar su primera solicitud recibe por correo su folio (SOL-0001…) y una clave; con su correo y esa clave entra a «Mis solicitudes».
+- **Devoluciones:** fotos obligatorias del material y checklist de 7 puntos; si no cumple todo, llega marcada «No cumple».
+- **Paquetería:** un renglón por tipo de paquete (cantidad, largo, ancho, alto y peso c/u) con totales y peso volumétrico.
+- **Logística:** folio CSTEXT (el mismo de «Fletes 2026»), categorización, responsable, transportista, unidad, guía, fecha programada,
+  mensajes a quien solicita y notas internas. Solo seguimiento: no se capturan importes.
+- **Personal:** el primer acceso al panel crea al administrador principal. A quien ya tiene cuenta (por ejemplo, del panel de proveedores)
+  se le invita y entra con su misma contraseña.
+- **Correos:** usan el mismo Gmail (Apps Script) y EmailJS de respaldo. Mientras `Correo.gs` solo reconozca al personal de proveedores,
+  los avisos de solicitudes salen por EmailJS (200 al mes en total).
+
+## Puesta en marcha (una sola vez)
+
+1. **Reglas:** Firebase > Firestore Database > Reglas > pega **todo** `firestore.rules` (incluye el bloque «Solicitudes de movimientos») > Publicar.
+2. Abre el panel de solicitudes y crea el administrador principal; en *Configuración* captura los correos de aviso y da de alta al personal.
+3. Comparte la liga del formulario con las áreas.
+
+Pruebas: `tests/solicitudes-web/e2e.mjs` (repositorio privado) con el emulador de Firebase y estas mismas reglas: 45 de 45 correctas.
+La prueba de proveedores (`tests/web/e2e.mjs`) sigue en 33 de 33 con las reglas combinadas.
