@@ -81,15 +81,15 @@ y las mismas reglas de seguridad: 33 de 33 verificaciones correctas.
 
 ---
 
-# Solicitudes de movimientos (carpeta `solicitudes/`)
+# Solicitudes de movimientos (carpeta `solicitud-de-movimientos/`)
 
 Plataforma aparte para que las áreas (Customer Service, Mercadotecnia, Ventas, Calidad…) pidan a Logística devoluciones,
 recolecciones, envíos, traslados, movimientos de Mercadotecnia, renta de unidad y maniobras, y les den seguimiento.
 
 | Liga | Para quién |
 |---|---|
-| `https://proveedores-cesantoni.github.io/solicitudes/` | Áreas que piden movimientos (formulario y «Mis solicitudes») |
-| `https://proveedores-cesantoni.github.io/solicitudes/admin.html` | Logística (base y seguimiento) |
+| `https://proveedores-cesantoni.github.io/solicitud-de-movimientos/` | Áreas que piden movimientos (formulario y «Mis solicitudes») |
+| `https://proveedores-cesantoni.github.io/solicitud-de-movimientos/admin.html` | Logística (base y seguimiento) |
 
 - **Base separada:** colecciones `sm_` en el mismo proyecto de Firebase. No lee ni escribe nada de `pv_` (proveedores) y tiene su propio personal.
 - **Quien solicita:** al mandar su primera solicitud recibe por correo su folio (SOL-0001…) y una clave; con su correo y esa clave entra a «Mis solicitudes».
@@ -108,5 +108,5 @@ recolecciones, envíos, traslados, movimientos de Mercadotecnia, renta de unidad
 2. Abre el panel de solicitudes y crea el administrador principal; en *Configuración* captura los correos de aviso y da de alta al personal.
 3. Comparte la liga del formulario con las áreas.
 
-Pruebas: `tests/solicitudes-web/e2e.mjs` (repositorio privado) con el emulador de Firebase y estas mismas reglas: 45 de 45 correctas.
+Pruebas: `tests/solicitudes-web/e2e.mjs` (repositorio privado) con el emulador de Firebase y estas mismas reglas: 51 de 51 correctas.
 La prueba de proveedores (`tests/web/e2e.mjs`) sigue en 33 de 33 con las reglas combinadas.
