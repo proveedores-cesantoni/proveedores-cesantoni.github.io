@@ -81,15 +81,15 @@ y las mismas reglas de seguridad: 33 de 33 verificaciones correctas.
 
 ---
 
-# Solicitudes de movimientos (carpeta `solicitud-de-movimientos/`)
+# Solicitudes de movimientos (sitio aparte: movimientos-cesantoni.github.io)
 
 Plataforma aparte para que las áreas (Customer Service, Mercadotecnia, Ventas, Calidad…) pidan a Logística devoluciones,
 recolecciones, envíos, traslados, movimientos de Mercadotecnia, renta de unidad y maniobras, y les den seguimiento.
 
 | Liga | Para quién |
 |---|---|
-| `https://proveedores-cesantoni.github.io/solicitud-de-movimientos/` | Áreas que piden movimientos (formulario y «Mis solicitudes») |
-| `https://proveedores-cesantoni.github.io/solicitud-de-movimientos/admin.html` | Logística (base y seguimiento) |
+| `https://movimientos-cesantoni.github.io/` | Áreas que piden movimientos (formulario y «Mis solicitudes») |
+| `https://movimientos-cesantoni.github.io/admin.html` | Logística (base y seguimiento) |
 
 - **Base separada:** colecciones `sm_` en el mismo proyecto de Firebase. No lee ni escribe nada de `pv_` (proveedores) y tiene su propio personal.
 - **Quien solicita:** al mandar su primera solicitud recibe por correo su folio (SOL-0001…) y una clave; con su correo y esa clave entra a «Mis solicitudes».
