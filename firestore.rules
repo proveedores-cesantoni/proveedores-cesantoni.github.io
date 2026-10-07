@@ -175,12 +175,15 @@ service cloud.firestore {
       allow get: if smStaff();
       allow create, update: if smOpera();
     }
-    // Folio consecutivo SOL-0001…: solo sube de uno en uno y siempre junto con el alta de esa solicitud.
+    // Folio consecutivo CSTEXT00760…: solo sube de uno en uno y siempre junto con el alta de esa solicitud.
+    // El administrador fija desde qué número sigue (n = último número usado).
     match /sm_config/folio {
       allow get: if signedIn();
-      allow create: if signedIn() && request.resource.data.keys().hasOnly(['n', 'ultimo']) && request.resource.data.n == 1 && smNueva(request.resource.data.ultimo);
-      allow update: if signedIn() && request.resource.data.keys().hasOnly(['n', 'ultimo']) && request.resource.data.n == resource.data.n + 1 &&
-        smNueva(request.resource.data.ultimo);
+      allow create: if (signedIn() && request.resource.data.keys().hasOnly(['n', 'ultimo']) && request.resource.data.n == 1 && smNueva(request.resource.data.ultimo)) ||
+        (smAdmin() && request.resource.data.keys().hasOnly(['n', 'ultimo']) && request.resource.data.n is int && request.resource.data.n >= 0);
+      allow update: if (signedIn() && request.resource.data.keys().hasOnly(['n', 'ultimo']) && request.resource.data.n == resource.data.n + 1 &&
+        smNueva(request.resource.data.ultimo)) ||
+        (smAdmin() && request.resource.data.keys().hasOnly(['n', 'ultimo']) && request.resource.data.n is int && request.resource.data.n >= 0);
     }
 
     match /sm_admins/{uid} {
@@ -213,7 +216,9 @@ service cloud.firestore {
           'producto_tipo', 'producto_otro', 'tipo_otro', 'articulos', 'observaciones', 'costo_absorbe', 'costo_detalle',
           'fecha_requerida', 'fecha_abierta', 'recoleccion', 'fecha_recoleccion', 'recoleccion_abierta', 'fuera_tiempo', 'aut_gerente', 'aut_estado',
           'origen_telefono', 'origen_referencias', 'destino_telefono', 'destino_referencias',
-          'fecha_entrega', 'aut_correo', 'aut_motivo', 'origen_link', 'destino_link', 'acepta_condiciones', 'condiciones_fecha']) &&
+          'fecha_entrega', 'aut_correo', 'aut_motivo', 'origen_link', 'destino_link', 'acepta_condiciones', 'condiciones_fecha', 'folio_cstext']) &&
+        // El consecutivo CSTEXT es el mismo folio de la solicitud.
+        request.resource.data.get('folio_cstext', f) == f &&
         // Quien solicita no puede registrar su propia autorización: solo «Pendiente de autorización» (o nada).
         request.resource.data.get('aut_estado', '') in ['', 'Pendiente de autorización'];
       // Quien solicita solo puede responder (Falta información → En revisión) o cancelar mientras no esté programada.
