@@ -112,6 +112,9 @@ service cloud.firestore {
     function smYo() { return get(/databases/$(database)/documents/sm_admins/$(request.auth.uid)).data; }
     function smStaff() { return signedIn() && exists(/databases/$(database)/documents/sm_admins/$(request.auth.uid)) && smYo().activo == true; }
     function smAdmin() { return smStaff() && smYo().rol == 'admin'; }
+    // Perfiles: admin (todo), planeador (opera las solicitudes; «operador» es el nombre anterior) y facturación (solo consulta y marca facturadas).
+    function smOpera() { return smStaff() && smYo().rol in ['admin', 'planeador', 'operador']; }
+    function smFactura() { return smStaff() && smYo().rol in ['admin', 'facturacion']; }
     function smSol(f) { return get(/databases/$(database)/documents/sm_solicitudes/$(f)).data; }
     function smSolDespues(f) { return getAfter(/databases/$(database)/documents/sm_solicitudes/$(f)).data; }
     function smDueno(f) { return signedIn() && smSol(f).uid == request.auth.uid; }
@@ -139,6 +142,20 @@ service cloud.firestore {
         getAfter(smAut(request.resource.data.aut_ref)).data.estado == request.resource.data.aut_estado;
     }
 
+    // Quien solicita puede modificar su folio solo mientras está «Recibida» y sin autorización enviada; nunca datos de Logística.
+    function smModifica(f) {
+      return signedIn() && resource.data.uid == request.auth.uid &&
+        resource.data.estado == 'recibida' && request.resource.data.estado == 'recibida' &&
+        resource.data.get('aut_enviada', '') == '' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['solicitante', 'area', 'telefono', 'tipo', 'prioridad', 'forma_envio',
+          'horario', 'motivo', 'dev_motivo', 'dev_checklist', 'origen_direccion', 'origen_contacto', 'origen_telefono', 'origen_link',
+          'destino_direccion', 'destino_contacto', 'destino_telefono', 'destino_link', 'producto_tipo', 'producto_otro', 'tipo_otro',
+          'articulos', 'observaciones', 'costo_absorbe', 'costo_detalle', 'fecha_requerida', 'fecha_entrega', 'fecha_abierta', 'recoleccion',
+          'fecha_recoleccion', 'recoleccion_abierta', 'fuera_tiempo', 'aut_estado', 'aut_correo', 'aut_motivo', 'dev_cumple', 'paquetes',
+          'paq_total', 'paq_peso_kg', 'paq_vol_kg', 'acepta_condiciones', 'condiciones_fecha', 'actualizada', 'modificada', 'modificaciones']) &&
+        request.resource.data.get('aut_estado', '') in ['', 'Pendiente de autorización'];
+    }
+
     match /sm_config/inicio {
       allow get: if true;
       allow create: if signedIn() && getAfter(/databases/$(database)/documents/sm_admins/$(request.auth.uid)).data.rol == 'admin';
@@ -147,6 +164,16 @@ service cloud.firestore {
     match /sm_config/avisos {
       allow get: if signedIn();
       allow create, update: if smAdmin() || (signedIn() && smInicioNuevo());
+    }
+    // Catálogos editables por el administrador (áreas, qué envías, tipos de movimiento). El formulario los lee sin cuenta.
+    match /sm_config/catalogos {
+      allow get: if true;
+      allow create, update: if smAdmin();
+    }
+    // Consecutivo del folio CSTEXT (lo asigna el planeador; el administrador fija desde dónde sigue).
+    match /sm_config/cstext {
+      allow get: if smStaff();
+      allow create, update: if smOpera();
     }
     // Folio consecutivo SOL-0001…: solo sube de uno en uno y siempre junto con el alta de esa solicitud.
     match /sm_config/folio {
@@ -190,7 +217,9 @@ service cloud.firestore {
         // Quien solicita no puede registrar su propia autorización: solo «Pendiente de autorización» (o nada).
         request.resource.data.get('aut_estado', '') in ['', 'Pendiente de autorización'];
       // Quien solicita solo puede responder (Falta información → En revisión) o cancelar mientras no esté programada.
-      allow update: if smStaff() || smRespuestaAut(f) || (signedIn() && resource.data.uid == request.auth.uid &&
+      allow update: if smOpera() || smRespuestaAut(f) || smModifica(f) ||
+        (smFactura() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['facturada', 'facturada_por', 'actualizada'])) ||
+        (signedIn() && resource.data.uid == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'actualizada', 'cerrada']) &&
         (request.resource.data.estado == resource.data.estado ||
          (resource.data.estado == 'informacion' && request.resource.data.estado == 'en_revision') ||
@@ -200,20 +229,21 @@ service cloud.firestore {
       // Mensajes: quien solicita solo ve los visibles; las notas internas son del personal.
       match /seguimiento/{id} {
         allow read: if smStaff() || (smDueno(f) && resource.data.visible == true);
-        allow create: if smStaff() || (signedIn() && smSolDespues(f).uid == request.auth.uid &&
+        allow create: if smOpera() || (signedIn() && smSolDespues(f).uid == request.auth.uid &&
           request.resource.data.visible == true && request.resource.data.autor_tipo == 'solicitante');
         allow delete: if smAdmin();
       }
       match /interno/{d} {
-        allow read, write: if smStaff();
+        allow read: if smStaff();
+        allow write: if smOpera();
       }
       match /archivos/{id} {
         allow read: if smStaff() || smDueno(f);
-        allow create: if smStaff() || (smDueno(f) && smAbierta(f) && request.resource.data.partes is int);
+        allow create: if smOpera() || (smDueno(f) && smAbierta(f) && request.resource.data.partes is int);
         allow delete: if smAdmin();
         match /partes/{n} {
           allow read: if smStaff() || smDueno(f);
-          allow create: if (smStaff() || (smDueno(f) && smAbierta(f))) && request.resource.data.d is string && request.resource.data.d.size() <= 700000;
+          allow create: if (smOpera() || (smDueno(f) && smAbierta(f))) && request.resource.data.d is string && request.resource.data.d.size() <= 700000;
           allow delete: if smAdmin();
         }
       }
@@ -222,8 +252,9 @@ service cloud.firestore {
     // Autorizaciones de costo enviadas por correo. El id es un token secreto de 32 caracteres: se lee solo conociéndolo.
     match /sm_autorizaciones/{t} {
       allow get: if t.size() == 32;
-      allow list, create, delete: if smStaff();
-      allow update: if smStaff() || (t.size() == 32 && resource.data.estado == 'Pendiente de autorización' &&
+      allow list: if smStaff();
+      allow create, delete: if smOpera();
+      allow update: if smOpera() || (t.size() == 32 && resource.data.estado == 'Pendiente de autorización' &&
         request.resource.data.estado in ['Autorizado', 'Rechazado'] &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'respondida', 'nombre', 'comentario']) &&
         getAfter(/databases/$(database)/documents/sm_solicitudes/$(resource.data.folio)).data.aut_estado == request.resource.data.estado &&
@@ -231,7 +262,7 @@ service cloud.firestore {
       // Copia de la cotización para verla desde la liga.
       match /archivos/{id}/partes/{n} {
         allow read: if t.size() == 32;
-        allow write: if smStaff();
+        allow write: if smOpera();
       }
     }
 
