@@ -170,6 +170,15 @@ service cloud.firestore {
       allow get: if true;
       allow create, update: if smAdmin();
     }
+    // Plantilla de movimientos (Excel) y su lista de transportistas: la sube el administrador; solo la lee el personal.
+    match /sm_config/plantilla {
+      allow get: if smStaff();
+      allow create, update: if smAdmin();
+    }
+    match /sm_config/plantilla_archivo {
+      allow get: if smStaff();
+      allow create, update: if smAdmin();
+    }
     // Consecutivo del folio CSTEXT (lo asigna el planeador; el administrador fija desde dónde sigue).
     match /sm_config/cstext {
       allow get: if smStaff();
