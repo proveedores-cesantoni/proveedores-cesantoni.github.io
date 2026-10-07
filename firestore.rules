@@ -149,7 +149,8 @@ service cloud.firestore {
         resource.data.get('aut_enviada', '') == '' &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['solicitante', 'area', 'telefono', 'tipo', 'prioridad', 'forma_envio',
           'horario', 'motivo', 'dev_motivo', 'dev_checklist', 'origen_direccion', 'origen_contacto', 'origen_telefono', 'origen_link',
-          'destino_direccion', 'destino_contacto', 'destino_telefono', 'destino_link', 'producto_tipo', 'producto_otro', 'tipo_otro',
+          'destino_direccion', 'destino_contacto', 'destino_telefono', 'destino_link', 'origen_ciudad', 'origen_estado', 'destino_ciudad', 'destino_estado',
+          'producto_tipo', 'producto_otro', 'tipo_otro',
           'articulos', 'observaciones', 'costo_absorbe', 'costo_detalle', 'fecha_requerida', 'fecha_entrega', 'fecha_abierta', 'recoleccion',
           'fecha_recoleccion', 'recoleccion_abierta', 'fuera_tiempo', 'aut_estado', 'aut_correo', 'aut_motivo', 'dev_cumple', 'paquetes',
           'paq_total', 'paq_peso_kg', 'paq_vol_kg', 'acepta_condiciones', 'condiciones_fecha', 'actualizada', 'modificada', 'modificaciones']) &&
@@ -224,7 +225,7 @@ service cloud.firestore {
           'creada', 'actualizada', 'cerrada', 'dev_cumple', 'paquetes', 'paq_total', 'paq_peso_kg', 'paq_vol_kg',
           'producto_tipo', 'producto_otro', 'tipo_otro', 'articulos', 'observaciones', 'costo_absorbe', 'costo_detalle',
           'fecha_requerida', 'fecha_abierta', 'recoleccion', 'fecha_recoleccion', 'recoleccion_abierta', 'fuera_tiempo', 'aut_gerente', 'aut_estado',
-          'origen_telefono', 'origen_referencias', 'destino_telefono', 'destino_referencias',
+          'origen_telefono', 'origen_referencias', 'destino_telefono', 'destino_referencias', 'origen_estado', 'destino_estado',
           'fecha_entrega', 'aut_correo', 'aut_motivo', 'origen_link', 'destino_link', 'acepta_condiciones', 'condiciones_fecha', 'folio_cstext']) &&
         // El consecutivo CSTEXT es el mismo folio de la solicitud.
         request.resource.data.get('folio_cstext', f) == f &&
