@@ -123,6 +123,22 @@ service cloud.firestore {
       return !exists(/databases/$(database)/documents/sm_config/inicio) && existsAfter(/databases/$(database)/documents/sm_config/inicio);
     }
 
+    // Respuesta de quien autoriza el costo desde la liga del correo (sin cuenta): solo con un token pendiente de este folio,
+    // solo los campos de la autorización y con el mismo resultado en sm_autorizaciones/{token}.
+    function smAut(t) { return /databases/$(database)/documents/sm_autorizaciones/$(t); }
+    function smRespuestaAut(f) {
+      return request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['aut_estado', 'aut_por', 'aut_nombre', 'aut_fecha', 'aut_ref', 'aut_comentario', 'actualizada']) &&
+        resource.data.aut_estado == 'Pendiente de autorización' &&
+        request.resource.data.aut_estado in ['Autorizado', 'Rechazado'] &&
+        request.resource.data.aut_ref is string && request.resource.data.aut_ref.size() == 32 &&
+        exists(smAut(request.resource.data.aut_ref)) &&
+        get(smAut(request.resource.data.aut_ref)).data.folio == f &&
+        get(smAut(request.resource.data.aut_ref)).data.estado == 'Pendiente de autorización' &&
+        get(smAut(request.resource.data.aut_ref)).data.correo == request.resource.data.aut_por &&
+        getAfter(smAut(request.resource.data.aut_ref)).data.estado == request.resource.data.aut_estado;
+    }
+
     match /sm_config/inicio {
       allow get: if true;
       allow create: if signedIn() && getAfter(/databases/$(database)/documents/sm_admins/$(request.auth.uid)).data.rol == 'admin';
@@ -169,11 +185,12 @@ service cloud.firestore {
           'creada', 'actualizada', 'cerrada', 'dev_cumple', 'paquetes', 'paq_total', 'paq_peso_kg', 'paq_vol_kg',
           'producto_tipo', 'producto_otro', 'tipo_otro', 'articulos', 'observaciones', 'costo_absorbe', 'costo_detalle',
           'fecha_requerida', 'fecha_abierta', 'recoleccion', 'fecha_recoleccion', 'recoleccion_abierta', 'fuera_tiempo', 'aut_gerente', 'aut_estado',
-          'origen_telefono', 'origen_referencias', 'destino_telefono', 'destino_referencias']) &&
+          'origen_telefono', 'origen_referencias', 'destino_telefono', 'destino_referencias',
+          'fecha_entrega', 'aut_correo', 'aut_motivo', 'origen_link', 'destino_link', 'acepta_condiciones', 'condiciones_fecha']) &&
         // Quien solicita no puede registrar su propia autorización: solo «Pendiente de autorización» (o nada).
         request.resource.data.get('aut_estado', '') in ['', 'Pendiente de autorización'];
       // Quien solicita solo puede responder (Falta información → En revisión) o cancelar mientras no esté programada.
-      allow update: if smStaff() || (signedIn() && resource.data.uid == request.auth.uid &&
+      allow update: if smStaff() || smRespuestaAut(f) || (signedIn() && resource.data.uid == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'actualizada', 'cerrada']) &&
         (request.resource.data.estado == resource.data.estado ||
          (resource.data.estado == 'informacion' && request.resource.data.estado == 'en_revision') ||
@@ -199,6 +216,22 @@ service cloud.firestore {
           allow create: if (smStaff() || (smDueno(f) && smAbierta(f))) && request.resource.data.d is string && request.resource.data.d.size() <= 700000;
           allow delete: if smAdmin();
         }
+      }
+    }
+
+    // Autorizaciones de costo enviadas por correo. El id es un token secreto de 32 caracteres: se lee solo conociéndolo.
+    match /sm_autorizaciones/{t} {
+      allow get: if t.size() == 32;
+      allow list, create, delete: if smStaff();
+      allow update: if smStaff() || (t.size() == 32 && resource.data.estado == 'Pendiente de autorización' &&
+        request.resource.data.estado in ['Autorizado', 'Rechazado'] &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'respondida', 'nombre', 'comentario']) &&
+        getAfter(/databases/$(database)/documents/sm_solicitudes/$(resource.data.folio)).data.aut_estado == request.resource.data.estado &&
+        getAfter(/databases/$(database)/documents/sm_solicitudes/$(resource.data.folio)).data.aut_ref == t);
+      // Copia de la cotización para verla desde la liga.
+      match /archivos/{id}/partes/{n} {
+        allow read: if t.size() == 32;
+        allow write: if smStaff();
       }
     }
 
