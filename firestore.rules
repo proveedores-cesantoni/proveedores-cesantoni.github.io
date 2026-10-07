@@ -108,7 +108,7 @@ service cloud.firestore {
     }
 
     // ================================================================== Solicitudes de movimientos (colecciones sm_)
-    // Plataforma aparte (carpeta solicitudes/): no lee ni escribe nada de las colecciones pv_ de proveedores.
+    // Plataforma aparte (sitio movimientos-cesantoni.github.io): no lee ni escribe nada de las colecciones pv_ de proveedores.
     function smYo() { return get(/databases/$(database)/documents/sm_admins/$(request.auth.uid)).data; }
     function smStaff() { return signedIn() && exists(/databases/$(database)/documents/sm_admins/$(request.auth.uid)) && smYo().activo == true; }
     function smAdmin() { return smStaff() && smYo().rol == 'admin'; }
@@ -166,7 +166,12 @@ service cloud.firestore {
         request.resource.data.keys().hasOnly(['solicitante', 'area', 'correo', 'telefono', 'autoriza', 'tipo', 'prioridad', 'forma_envio',
           'horario', 'cliente', 'referencia', 'motivo', 'dev_motivo', 'dev_checklist', 'origen_nombre', 'origen_direccion', 'origen_ciudad',
           'origen_contacto', 'destino_nombre', 'destino_direccion', 'destino_ciudad', 'destino_contacto', 'folio', 'n', 'uid', 'estado',
-          'creada', 'actualizada', 'cerrada', 'dev_cumple', 'paquetes', 'paq_total', 'paq_peso_kg', 'paq_vol_kg']);
+          'creada', 'actualizada', 'cerrada', 'dev_cumple', 'paquetes', 'paq_total', 'paq_peso_kg', 'paq_vol_kg',
+          'producto_tipo', 'producto_otro', 'tipo_otro', 'articulos', 'observaciones', 'costo_absorbe', 'costo_detalle',
+          'fecha_requerida', 'fecha_abierta', 'recoleccion', 'fecha_recoleccion', 'recoleccion_abierta', 'fuera_tiempo', 'aut_gerente', 'aut_estado',
+          'origen_telefono', 'origen_referencias', 'destino_telefono', 'destino_referencias']) &&
+        // Quien solicita no puede registrar su propia autorización: solo «Pendiente de autorización» (o nada).
+        request.resource.data.get('aut_estado', '') in ['', 'Pendiente de autorización'];
       // Quien solicita solo puede responder (Falta información → En revisión) o cancelar mientras no esté programada.
       allow update: if smStaff() || (signedIn() && resource.data.uid == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'actualizada', 'cerrada']) &&
