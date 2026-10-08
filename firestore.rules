@@ -142,6 +142,14 @@ service cloud.firestore {
         getAfter(smAut(request.resource.data.aut_ref)).data.estado == request.resource.data.aut_estado;
     }
 
+    // Envío automático de la autorización de costo: quien solicita lo hace una sola vez, al crear su folio.
+    function smAutAuto(f) {
+      return signedIn() && resource.data.uid == request.auth.uid && resource.data.estado == 'recibida' &&
+        resource.data.get('aut_enviada', '') == '' && resource.data.get('aut_estado', '') == 'Pendiente de autorización' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aut_enviada', 'actualizada']) &&
+        request.resource.data.aut_enviada is string && request.resource.data.aut_enviada.size() > 0;
+    }
+
     // Quien solicita puede modificar su folio solo mientras está «Recibida» y sin autorización enviada; nunca datos de Logística.
     function smModifica(f) {
       return signedIn() && resource.data.uid == request.auth.uid &&
@@ -232,7 +240,7 @@ service cloud.firestore {
         // Quien solicita no puede registrar su propia autorización: solo «Pendiente de autorización» (o nada).
         request.resource.data.get('aut_estado', '') in ['', 'Pendiente de autorización'];
       // Quien solicita solo puede responder (Falta información → En revisión) o cancelar mientras no esté programada.
-      allow update: if smOpera() || smRespuestaAut(f) || smModifica(f) ||
+      allow update: if smOpera() || smRespuestaAut(f) || smModifica(f) || smAutAuto(f) ||
         (smFactura() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['facturada', 'facturada_por', 'actualizada'])) ||
         (signedIn() && resource.data.uid == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'actualizada', 'cerrada']) &&
@@ -268,7 +276,15 @@ service cloud.firestore {
     match /sm_autorizaciones/{t} {
       allow get: if t.size() == 32;
       allow list: if smStaff();
-      allow create, delete: if smOpera();
+      allow delete: if smOpera();
+      // Logística, o quien solicita al crear su folio (junto con aut_enviada en la misma escritura y al correo que él mismo indicó).
+      allow create: if smOpera() || (signedIn() && t.size() == 32 && request.resource.data.folio is string &&
+        smSol(request.resource.data.folio).uid == request.auth.uid &&
+        smSol(request.resource.data.folio).get('aut_enviada', '') == '' &&
+        smSol(request.resource.data.folio).get('aut_estado', '') == 'Pendiente de autorización' &&
+        request.resource.data.correo == smSol(request.resource.data.folio).aut_correo &&
+        request.resource.data.estado == 'Pendiente de autorización' &&
+        smSolDespues(request.resource.data.folio).aut_enviada == request.resource.data.enviada);
       allow update: if smOpera() || (t.size() == 32 && resource.data.estado == 'Pendiente de autorización' &&
         request.resource.data.estado in ['Autorizado', 'Rechazado'] &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'respondida', 'nombre', 'comentario']) &&
@@ -277,7 +293,8 @@ service cloud.firestore {
       // Copia de la cotización para verla desde la liga.
       match /archivos/{id}/partes/{n} {
         allow read: if t.size() == 32;
-        allow write: if smOpera();
+        allow write: if smOpera() || (signedIn() && smSol(get(smAut(t)).data.folio).uid == request.auth.uid &&
+          request.resource.data.d is string && request.resource.data.d.size() <= 700000);
       }
     }
 
