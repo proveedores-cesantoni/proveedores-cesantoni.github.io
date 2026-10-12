@@ -340,6 +340,8 @@ service cloud.firestore {
     // Origen (CEDIS) y puente de Samsara.
     match /lc_config/{id} {
       allow read, write: if lcTodo();
+      // A quién van los correos de alertas: lo leen todas las áreas (el script de correo lo lee con el token de quien genera la alerta).
+      allow read: if id == 'correos' && lcCualquiera();
     }
     // Usuarios: correo → área. Cada quien lee el suyo; solo el Administrador da de alta, cambia o borra.
     match /lc_usuarios/{correo} {
@@ -395,7 +397,8 @@ service cloud.firestore {
     match /lc_alertas/{id} {
       allow read: if lcCualquiera();
       allow create: if lcFirma(request.resource.data);
-      allow update: if lcCualquiera() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
+      allow update: if lcCualquiera() && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['correo', 'correo_para', 'correo_fecha', 'correo_error']));
       allow delete: if lcEs(['admin']);
     }
   }
