@@ -362,6 +362,7 @@ service cloud.firestore {
       match /historial/{h} {
         allow read: if lcCualquiera();
         allow create: if lcFirma(request.resource.data);
+        allow delete: if lcEs(['admin']);
       }
     }
     // Pantalla del almacén (pública): copia del folio sin datos comerciales ni personales.
