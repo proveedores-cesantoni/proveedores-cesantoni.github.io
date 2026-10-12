@@ -307,7 +307,7 @@ service cloud.firestore {
 
     // ================================================================== Logística CESANTONI · control de embarques (colecciones lc_)
     // Sitio logistica-cesantoni.github.io. Una cuenta por área (Ventas, Operación, Transporte, Administrador) con su área en lc_areas/{uid}.
-    // La sesión vale 12 horas desde que se escribió la contraseña. La Pantalla (tablero público) solo lee lc_folios.
+    // La sesión vale 12 horas desde que se escribió la contraseña. La Pantalla (tablero público) solo lee lc_pantalla.
     function lcVigente() { return signedIn() && request.auth.token.auth_time > request.time.toMillis() / 1000 - 43200; }
     function lcArea() { return get(/databases/$(database)/documents/lc_areas/$(request.auth.uid)).data.area; }
     function lcEs(areas) { return lcVigente() && exists(/databases/$(database)/documents/lc_areas/$(request.auth.uid)) && lcArea() in areas; }
@@ -325,7 +325,10 @@ service cloud.firestore {
         (!(d.estatus in ['LISTO', 'EN_RUTA', 'ENTREGADO']) || lcDocsOk(d)) &&
         (d.estatus != 'PARADO' || (d.motivo is string && d.motivo.size() > 0)) &&
         (!('paradas' in d) || (d.paradas is list && d.paradas.size() <= 40)) &&
-        d.keys().hasOnly(['folio', 'cliente', 'destino', 'hojas', 'clasificacion', 'paradas', 'tarimas', 'resto', 'peso_kg', 'tipo_unidad', 'estatus', 'motivo', 'docs',
+        (!('material' in d) || (d.material is list && d.material.size() <= 300)) &&
+        (!('tipo_envio' in d) || d.tipo_envio in ['NACIONAL', 'ULTIMA_MILLA']) &&
+        (!('entrega' in d) || d.entrega == null || d.entrega is map) &&
+        d.keys().hasOnly(['folio', 'tipo_envio', 'cliente', 'destino', 'hojas', 'clasificacion', 'paradas', 'material', 'entrega', 'm2', 'lat', 'lng', 'tarimas', 'resto', 'peso_kg', 'tipo_unidad', 'estatus', 'motivo', 'docs',
           'transportista', 'unidad', 'cita', 'anden', 'salida', 'entregado', 'creado', 'actualizado', 'creado_por']);
     }
 
@@ -345,9 +348,9 @@ service cloud.firestore {
         (lcEs(['admin']) && request.resource.data.area in ['ventas', 'operacion', 'transporte', 'admin']);
       allow update, delete: if lcEs(['admin']);
     }
-    // Folios: lectura pública para la Pantalla (sin tarifas, operador ni placas: eso vive en lc_despachos).
+    // Folios: solo áreas con sesión (traen material, direcciones y teléfonos de Última Milla).
     match /lc_folios/{id} {
-      allow read: if true;
+      allow read: if lcCualquiera();
       allow create: if lcEs(['ventas', 'transporte', 'admin']) && lcFolioValido(request.resource.data) && request.resource.data.estatus == 'RECIBIDO';
       allow update: if lcFolioValido(request.resource.data) && request.resource.data.folio == resource.data.folio && (
         lcTodo() ||
@@ -359,6 +362,14 @@ service cloud.firestore {
         allow read: if lcCualquiera();
         allow create: if lcCualquiera() && request.resource.data.area == lcArea();
       }
+    }
+    // Pantalla del almacén (pública): copia del folio sin datos comerciales ni personales.
+    match /lc_pantalla/{id} {
+      allow read: if true;
+      allow create, update: if lcCualquiera() &&
+        request.resource.data.keys().hasOnly(['folio', 'tipo_envio', 'cliente', 'destino', 'transportista', 'tipo_unidad', 'cita', 'anden', 'docs', 'estatus', 'entregado', 'actualizado']) &&
+        request.resource.data.docs is int && request.resource.data.docs >= 0 && request.resource.data.docs <= 3;
+      allow delete: if lcEs(['admin']);
     }
     // Despacho: operador, placas, tarifa negociada y checklist. Solo Transporte y Administrador.
     match /lc_despachos/{id} {
