@@ -334,7 +334,7 @@ service cloud.firestore {
         (!('tipo_envio' in d) || d.tipo_envio in ['NACIONAL', 'ULTIMA_MILLA']) &&
         (!('entrega' in d) || d.entrega == null || d.entrega is map) &&
         d.keys().hasOnly(['folio', 'tipo_envio', 'cliente', 'destino', 'hojas', 'clasificacion', 'paradas', 'material', 'entrega', 'm2', 'lat', 'lng', 'tarimas', 'resto', 'peso_kg', 'tipo_unidad', 'estatus', 'motivo', 'docs',
-          'transportista', 'unidad', 'cita', 'anden', 'salida', 'entregado', 'creado', 'actualizado', 'creado_por']);
+          'transportista', 'unidad', 'cita', 'anden', 'salida', 'entregado', 'creado', 'actualizado', 'creado_por', 'version', 'modificado']);
     }
 
     // Origen (CEDIS) y puente de Samsara.
@@ -355,6 +355,10 @@ service cloud.firestore {
       allow create: if lcEs(['ventas', 'transporte', 'admin']) && lcFolioValido(request.resource.data) && request.resource.data.estatus == 'RECIBIDO';
       allow update: if lcFolioValido(request.resource.data) && request.resource.data.folio == resource.data.folio && (
         lcTodo() ||
+        // Modificación de acopio (Ventas): solo el contenido, sin cambiar estatus ni documentos, y antes de Armado.
+        (lcEs(['ventas']) && resource.data.estatus in ['RECIBIDO', 'EN_PREPARACION', 'PARADO', 'INCOMPLETO'] &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tipo_envio', 'm2', 'lat', 'lng', 'entrega', 'material', 'cliente', 'destino', 'hojas',
+            'tarimas', 'resto', 'peso_kg', 'tipo_unidad', 'clasificacion', 'paradas', 'actualizado', 'modificado', 'version'])) ||
         (lcEs(['operacion']) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estatus', 'motivo', 'docs', 'actualizado']) &&
           request.resource.data.estatus in ['RECIBIDO', 'EN_PREPARACION', 'ARMADO', 'LISTO', 'PARADO', 'INCOMPLETO'] &&
           resource.data.estatus in ['RECIBIDO', 'EN_PREPARACION', 'ARMADO', 'LISTO', 'PARADO', 'INCOMPLETO']));
@@ -380,6 +384,14 @@ service cloud.firestore {
     match /lc_unidades/{id} { allow read, write: if lcTodo(); }
     match /lc_destinos/{id} { allow read, write: if lcTodo(); }
     match /lc_rutas/{id} { allow read, write: if lcTodo(); }
+    // Reprogramaciones e incidencias por folio: las registra cualquier área con sesión (con su área y correo); solo el Administrador borra.
+    match /lc_incidencias/{id} {
+      allow read: if lcCualquiera();
+      allow create: if lcFirma(request.resource.data) && request.resource.data.tipo in ['REPROGRAMACION', 'INCIDENCIA'] &&
+        request.resource.data.motivo is string && request.resource.data.motivo.size() > 0 &&
+        (request.resource.data.tipo == 'INCIDENCIA' || lcTodo());
+      allow delete: if lcEs(['admin']);
+    }
     match /lc_alertas/{id} {
       allow read: if lcCualquiera();
       allow create: if lcFirma(request.resource.data);
