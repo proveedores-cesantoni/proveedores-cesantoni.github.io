@@ -306,16 +306,21 @@ service cloud.firestore {
     }
 
     // ================================================================== Logística CESANTONI · control de embarques (colecciones lc_)
-    // Sitio logistica-cesantoni.github.io. Una cuenta por área (Ventas, Operación, Transporte, Administrador) con su área en lc_areas/{uid}.
-    // La sesión vale 12 horas desde que se escribió la contraseña. La Pantalla (tablero público) solo lee lc_pantalla.
-    function lcVigente() { return signedIn() && request.auth.token.auth_time > request.time.toMillis() / 1000 - 43200; }
-    function lcArea() { return get(/databases/$(database)/documents/lc_areas/$(request.auth.uid)).data.area; }
-    function lcEs(areas) { return lcVigente() && exists(/databases/$(database)/documents/lc_areas/$(request.auth.uid)) && lcArea() in areas; }
+    // Sitio logistica-cesantoni.github.io. Cada persona entra con su correo (liga de Firebase al buzón, correo verificado).
+    // Su área vive en lc_usuarios/{correo en minúsculas}; jroman@cesantoni.com.mx siempre es Administrador.
+    // La sesión vale 12 horas desde que se abrió la liga. La Pantalla (tablero público) solo lee lc_pantalla.
+    function lcVigente() { return signedIn() && request.auth.token.auth_time > request.time.toMillis() / 1000 - 43200 && request.auth.token.email_verified == true; }
+    function lcCorreo() { return request.auth.token.email.lower(); }
+    function lcUsuario() { return /databases/$(database)/documents/lc_usuarios/$(lcCorreo()); }
+    function lcSuper() { return lcCorreo() == 'jroman@cesantoni.com.mx'; }
+    function lcEs(areas) {
+      return lcVigente() && ((lcSuper() && 'admin' in areas) ||
+        (exists(lcUsuario()) && get(lcUsuario()).data.activo == true && get(lcUsuario()).data.area in areas));
+    }
     function lcCualquiera() { return lcEs(['ventas', 'operacion', 'transporte', 'admin']); }
     function lcTodo() { return lcEs(['transporte', 'admin']); }
-    function lcInicio() {
-      return !exists(/databases/$(database)/documents/lc_config/inicio) && existsAfter(/databases/$(database)/documents/lc_config/inicio);
-    }
+    // Historial y alertas llevan el área y el correo de quien los escribe.
+    function lcFirma(d) { return lcEs([d.area]) && d.por == lcCorreo(); }
     function lcDocsOk(d) { return d.docs.factura == true && d.docs.carta_porte == true && d.docs.remision == true; }
     // Reglas fijas del folio: LISTO / EN_RUTA / ENTREGADO solo con los tres documentos; PARADO siempre con motivo.
     function lcFolioValido(d) {
@@ -332,21 +337,17 @@ service cloud.firestore {
           'transportista', 'unidad', 'cita', 'anden', 'salida', 'entregado', 'creado', 'actualizado', 'creado_por']);
     }
 
-    match /lc_config/inicio {
-      allow get: if true;
-      allow create: if signedIn() && getAfter(/databases/$(database)/documents/lc_areas/$(request.auth.uid)).data.area == 'admin';
-    }
     // Origen (CEDIS) y puente de Samsara.
     match /lc_config/{id} {
-      allow read: if lcTodo();
-      allow write: if lcTodo() && id != 'inicio';
+      allow read, write: if lcTodo();
     }
-    match /lc_areas/{uid} {
-      allow get: if signedIn() && (request.auth.uid == uid || lcEs(['admin']));
+    // Usuarios: correo → área. Cada quien lee el suyo; solo el Administrador da de alta, cambia o borra.
+    match /lc_usuarios/{correo} {
+      allow get: if (signedIn() && request.auth.token.email_verified == true && correo == lcCorreo()) || lcEs(['admin']);
       allow list: if lcEs(['admin']);
-      allow create: if (signedIn() && lcInicio() && request.resource.data.area in ['ventas', 'operacion', 'transporte', 'admin']) ||
-        (lcEs(['admin']) && request.resource.data.area in ['ventas', 'operacion', 'transporte', 'admin']);
-      allow update, delete: if lcEs(['admin']);
+      allow create, update: if lcEs(['admin']) && correo == correo.lower() &&
+        request.resource.data.area in ['ventas', 'operacion', 'transporte', 'admin'] && request.resource.data.activo is bool;
+      allow delete: if lcEs(['admin']);
     }
     // Folios: solo áreas con sesión (traen material, direcciones y teléfonos de Última Milla).
     match /lc_folios/{id} {
@@ -360,7 +361,7 @@ service cloud.firestore {
       allow delete: if lcEs(['admin']);
       match /historial/{h} {
         allow read: if lcCualquiera();
-        allow create: if lcCualquiera() && request.resource.data.area == lcArea();
+        allow create: if lcFirma(request.resource.data);
       }
     }
     // Pantalla del almacén (pública): copia del folio sin datos comerciales ni personales.
@@ -380,7 +381,7 @@ service cloud.firestore {
     match /lc_rutas/{id} { allow read, write: if lcTodo(); }
     match /lc_alertas/{id} {
       allow read: if lcCualquiera();
-      allow create: if lcCualquiera() && request.resource.data.area == lcArea();
+      allow create: if lcFirma(request.resource.data);
       allow update: if lcCualquiera() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
       allow delete: if lcEs(['admin']);
     }
