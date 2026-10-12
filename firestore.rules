@@ -304,5 +304,73 @@ service cloud.firestore {
       allow read, update: if smStaff();
       allow delete: if smAdmin();
     }
+
+    // ================================================================== Logística CESANTONI · control de embarques (colecciones lc_)
+    // Sitio logistica-cesantoni.github.io. Una cuenta por área (Ventas, Operación, Transporte, Administrador) con su área en lc_areas/{uid}.
+    // La sesión vale 12 horas desde que se escribió la contraseña. La Pantalla (tablero público) solo lee lc_folios.
+    function lcVigente() { return signedIn() && request.auth.token.auth_time > request.time.toMillis() / 1000 - 43200; }
+    function lcArea() { return get(/databases/$(database)/documents/lc_areas/$(request.auth.uid)).data.area; }
+    function lcEs(areas) { return lcVigente() && exists(/databases/$(database)/documents/lc_areas/$(request.auth.uid)) && lcArea() in areas; }
+    function lcCualquiera() { return lcEs(['ventas', 'operacion', 'transporte', 'admin']); }
+    function lcTodo() { return lcEs(['transporte', 'admin']); }
+    function lcInicio() {
+      return !exists(/databases/$(database)/documents/lc_config/inicio) && existsAfter(/databases/$(database)/documents/lc_config/inicio);
+    }
+    function lcDocsOk(d) { return d.docs.factura == true && d.docs.carta_porte == true && d.docs.remision == true; }
+    // Reglas fijas del folio: LISTO / EN_RUTA / ENTREGADO solo con los tres documentos; PARADO siempre con motivo.
+    function lcFolioValido(d) {
+      return d.folio is string && d.folio.size() > 0 && d.cliente is string && d.peso_kg is number && d.tarimas is number &&
+        d.tipo_unidad in ['SENCILLO', 'FULL'] && d.docs is map && d.docs.keys().hasOnly(['factura', 'carta_porte', 'remision']) &&
+        d.estatus in ['RECIBIDO', 'EN_PREPARACION', 'ARMADO', 'LISTO', 'PARADO', 'INCOMPLETO', 'EN_RUTA', 'ENTREGADO'] &&
+        (!(d.estatus in ['LISTO', 'EN_RUTA', 'ENTREGADO']) || lcDocsOk(d)) &&
+        (d.estatus != 'PARADO' || (d.motivo is string && d.motivo.size() > 0)) &&
+        d.keys().hasOnly(['folio', 'cliente', 'destino', 'hojas', 'tarimas', 'resto', 'peso_kg', 'tipo_unidad', 'estatus', 'motivo', 'docs',
+          'transportista', 'unidad', 'cita', 'anden', 'salida', 'entregado', 'creado', 'actualizado', 'creado_por']);
+    }
+
+    match /lc_config/inicio {
+      allow get: if true;
+      allow create: if signedIn() && getAfter(/databases/$(database)/documents/lc_areas/$(request.auth.uid)).data.area == 'admin';
+    }
+    // Origen (CEDIS) y puente de Samsara.
+    match /lc_config/{id} {
+      allow read: if lcTodo();
+      allow write: if lcTodo() && id != 'inicio';
+    }
+    match /lc_areas/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || lcEs(['admin']));
+      allow list: if lcEs(['admin']);
+      allow create: if (signedIn() && lcInicio() && request.resource.data.area in ['ventas', 'operacion', 'transporte', 'admin']) ||
+        (lcEs(['admin']) && request.resource.data.area in ['ventas', 'operacion', 'transporte', 'admin']);
+      allow update, delete: if lcEs(['admin']);
+    }
+    // Folios: lectura pública para la Pantalla (sin tarifas, operador ni placas: eso vive en lc_despachos).
+    match /lc_folios/{id} {
+      allow read: if true;
+      allow create: if lcEs(['ventas', 'transporte', 'admin']) && lcFolioValido(request.resource.data) && request.resource.data.estatus == 'RECIBIDO';
+      allow update: if lcFolioValido(request.resource.data) && request.resource.data.folio == resource.data.folio && (
+        lcTodo() ||
+        (lcEs(['operacion']) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estatus', 'motivo', 'docs', 'actualizado']) &&
+          request.resource.data.estatus in ['RECIBIDO', 'EN_PREPARACION', 'ARMADO', 'LISTO', 'PARADO', 'INCOMPLETO'] &&
+          resource.data.estatus in ['RECIBIDO', 'EN_PREPARACION', 'ARMADO', 'LISTO', 'PARADO', 'INCOMPLETO']));
+      allow delete: if lcEs(['admin']);
+      match /historial/{h} {
+        allow read: if lcCualquiera();
+        allow create: if lcCualquiera() && request.resource.data.area == lcArea();
+      }
+    }
+    // Despacho: operador, placas, tarifa negociada y checklist. Solo Transporte y Administrador.
+    match /lc_despachos/{id} {
+      allow read, write: if lcTodo();
+    }
+    match /lc_unidades/{id} { allow read, write: if lcTodo(); }
+    match /lc_destinos/{id} { allow read, write: if lcTodo(); }
+    match /lc_rutas/{id} { allow read, write: if lcTodo(); }
+    match /lc_alertas/{id} {
+      allow read: if lcCualquiera();
+      allow create: if lcCualquiera() && request.resource.data.area == lcArea();
+      allow update: if lcCualquiera() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['leida']);
+      allow delete: if lcEs(['admin']);
+    }
   }
 }
