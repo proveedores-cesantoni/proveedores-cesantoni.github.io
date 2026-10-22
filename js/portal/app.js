@@ -1,9 +1,9 @@
 /* Portal del proveedor. */
-import { start, configured, friendly, AppError } from '../core/firebase.js?v=13';
-import { PASOS, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, requeridos, validar, visible, aplica } from '../core/catalog.js?v=13';
-import * as P from '../core/proveedor.js?v=13';
-import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, lista, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=13';
-import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=13';
+import { start, configured, friendly, AppError } from '../core/firebase.js?v=14';
+import { PASOS, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=14';
+import * as P from '../core/proveedor.js?v=14';
+import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=14';
+import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=14';
 
 const root = document.getElementById('app');
 const PASOS_UI = [...PASOS.map((p) => ({ id: p.id, t: p.titulo, s: p.sub })), { id: 'documentos', t: 'Documentos', s: 'PDF o imagen' }, { id: 'revision', t: 'Enviar', s: 'Revisa y envía' }];
@@ -19,6 +19,13 @@ const OPC_ICON = {
   man_horario: ['radar', 'clock', 'cal']
 };
 const DRAFT = 'cp_borrador';
+/* Liga para proveedores con los que ya se trabaja (…/?directorio o …/directorio/): arman el directorio y mantienen al día sus documentos. */
+const MODO = 'cp_modo';
+const directorio = (() => {
+  let v = /(^|[?&])directorio(=|&|$)/.test(location.search.slice(1));
+  try { if (v) sessionStorage.setItem(MODO, 'actual'); else v = sessionStorage.getItem(MODO) === 'actual'; } catch (e) { /* sin almacenamiento */ }
+  return v;
+})();
 let prov = null, docs = [], errores = {}, actual = '';
 const guard = { dirty: false, vuelo: null, otra: false, cambiados: {}, seq: 0, texto: 'Todo guardado', mal: false, el: null };
 let borrador = (() => { try { return JSON.parse(sessionStorage.getItem(DRAFT) || '{}'); } catch (e) { return {}; } })();
@@ -49,7 +56,7 @@ function ruta() {
   if (!prov) return h0 === 'contacto' ? asistente('contacto') : portada();
   if (h0 === 'estado' && prov.estado !== 'captura') return estado();
   if (PASOS_UI.some((p) => p.id === h0) && h0 !== 'contacto' && prov.estado === 'captura') return asistente(h0);
-  if (['empresa', 'operacion'].includes(h0) && prov.estado === 'correccion') return asistente(h0);
+  if (['empresa', 'operacion'].includes(h0) && ['correccion', 'aprobado'].includes(prov.estado)) return asistente(h0);
   const d = inicial();
   history.replaceState(null, '', '#' + d);
   return d === 'estado' ? estado() : asistente(d);
@@ -69,13 +76,15 @@ function portada() {
     tag(d.regla === 'antiguedad' ? 'accent' : 'info', d.regla === 'antiguedad' ? 'Máx. 3 meses' : 'Vigente')));
   mount(root, h('div', { class: 'portal-hero' },
     h('section', null,
-      h('span', { class: 'eyebrow' }, 'Red de transporte · CESANTONI'),
-      h('h1', { class: 'hero-title' }, 'Alta de proveedores de transporte'),
-      h('p', { class: 'hero-lead' }, 'Registra tu empresa, sube tus documentos y sigue tu revisión en línea. Tu avance se guarda solo: puedes pausar y continuar cuando quieras.'),
+      h('span', { class: 'eyebrow' }, directorio ? 'Directorio de proveedores · CESANTONI' : 'Red de transporte · CESANTONI'),
+      h('h1', { class: 'hero-title' }, directorio ? 'Actualiza tus datos de proveedor' : 'Alta de proveedores de transporte'),
+      h('p', { class: 'hero-lead' }, directorio
+        ? 'Si ya trabajas con CESANTONI, registra aquí los datos de tu empresa, tus contactos por área y tus documentos vigentes. Con tu folio y clave podrás actualizarlos cuando cambien.'
+        : 'Registra tu empresa, sube tus documentos y sigue tu revisión en línea. Tu avance se guarda solo: puedes pausar y continuar cuando quieras.'),
       h('div', { class: 'steps-mini' },
-        h('div', null, h('b', null, '01'), h('span', null, 'Datos de tu empresa')),
-        h('div', null, h('b', null, '02'), h('span', null, 'Documentos en PDF o foto')),
-        h('div', null, h('b', null, '03'), h('span', null, 'Revisión y alta'))),
+        h('div', null, h('b', null, '01'), h('span', null, directorio ? 'Datos y contactos' : 'Datos de tu empresa')),
+        h('div', null, h('b', null, '02'), h('span', null, directorio ? 'Documentos vigentes' : 'Documentos en PDF o foto')),
+        h('div', null, h('b', null, '03'), h('span', null, directorio ? 'Validación y actualizaciones' : 'Revisión y alta'))),
       h('div', { class: 'card card-pad' }, h('h2', { style: { fontSize: '16px', marginBottom: '12px' } }, 'Documentos que te pediremos'),
         h('ul', { class: 'doclist' }, req),
         h('p', { class: 'small muted', style: { margin: '12px 0 0' } }, 'PDF, JPG, PNG o WEBP de hasta ' + MAX_MB + ' MB. Operación nacional y cobertura en Centroamérica: ' + CENTROAMERICA.join(', ') + '.'))),
@@ -85,16 +94,16 @@ function portada() {
 
 function accesos() {
   const card = h('div', { class: 'card card-pad' });
-  const tabs = [['nuevo', 'Nuevo registro'], ['continuar', 'Continuar'], ['olvide', 'Olvidé mi clave']];
+  const tabs = [['nuevo', directorio ? 'Primera vez' : 'Nuevo registro'], ['continuar', directorio ? 'Ya tengo folio' : 'Continuar'], ['olvide', 'Olvidé mi clave']];
   let activa = 'nuevo';
   const barra = h('div', { class: 'tabs', role: 'tablist' });
   const cuerpo = h('div');
   function pintar() {
     mount(barra, tabs.map(([k, l]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(k === activa), onclick: () => { activa = k; pintar(); } }, l)));
     if (activa === 'nuevo') {
-      mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '8px' } }, 'Empieza tu registro'),
+      mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '8px' } }, directorio ? 'Registra a tu empresa' : 'Empieza tu registro'),
         h('p', { class: 'muted' }, 'Primero tus datos de contacto. Al terminar ese paso recibes tu folio y una clave para continuar desde cualquier dispositivo.'),
-        h('button', { type: 'button', class: 'btn btn-primary btn-block', onclick: () => ir('contacto') }, 'Iniciar registro'));
+        h('button', { type: 'button', class: 'btn btn-primary btn-block', onclick: () => ir('contacto') }, directorio ? 'Registrar mi empresa' : 'Iniciar registro'));
     } else if (activa === 'continuar') {
       const folio = h('input', { class: 'input', id: 'c-folio', autocomplete: 'off', autocapitalize: 'characters', placeholder: 'PROV-0001' });
       const clave = h('input', { class: 'input', id: 'c-clave', autocomplete: 'off', placeholder: 'XXXX-XXXX' });
@@ -108,7 +117,7 @@ function accesos() {
         try { prov = await P.entrar(folio.value, clave.value); docs = await P.documentos(prov.id); errores = validar(prov.datos || {}); ir(inicial()); }
         catch (e) { busy(btn, false); err.textContent = friendly(e).message; err.hidden = false; }
       });
-      mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '12px' } }, 'Continuar mi registro'), form);
+      mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '12px' } }, directorio ? 'Entrar para actualizar' : 'Continuar mi registro'), form);
     } else {
       const folio = h('input', { class: 'input', id: 'o-folio', autocomplete: 'off', placeholder: 'PROV-0001' });
       const correo = h('input', { class: 'input', id: 'o-correo', type: 'email', autocomplete: 'email', placeholder: 'nombre@empresa.com' });
@@ -205,6 +214,7 @@ function controlBase(c, pasoId) {
   const help = c.help ? h('p', { class: 'help', id: 'h-' + c.k }, c.help) : null;
   const req = c.req ? h('span', { class: 'req', 'aria-hidden': 'true' }, '*') : null;
   const desc = [c.help ? 'h-' + c.k : '', 'e-' + c.k].filter(Boolean).join(' ');
+  if (c.t === 'contactos') return controlContactos(c, pasoId, v, err, help, desc, ver);
   if (c.t === 'multi' || c.t === 'radio') {
     const tipo = c.k === 'servicios' ? 'tiles-lg' : ['cobertura', 'centroamerica', 'fw_aduanas'].includes(c.k) ? 'tiles-sm' : 'tiles-md';
     const grupo = h('div', { class: 'tiles ' + tipo + (c.t === 'radio' ? ' is-radio' : '') });
@@ -250,6 +260,33 @@ function controlBase(c, pasoId) {
     h('label', { for: inp.id }, c.l, req), inp, help, err);
 }
 
+/* Lista de contactos por área: un renglón por persona, con «Agregar contacto» y «Quitar». */
+let contactoSeq = 0;
+function controlContactos(c, pasoId, v, err, help, desc, ver) {
+  const filas = h('div', { class: 'contactos' });
+  const leer = () => Array.from(filas.querySelectorAll('.contacto')).map((f) => {
+    const o = {}; f.querySelectorAll('[data-k]').forEach((x) => { o[x.dataset.k] = x.value; }); return o;
+  });
+  const avisar = () => { tocados[c.k] = true; cambiar(c.k, leer(), pasoId); };
+  const fila = (x) => {
+    const n = ++contactoSeq, id = (k) => 'f-ct-' + n + '-' + k;
+    const inp = (k, l, tipo, ac) => { const el = h('input', { class: 'input', id: id(k), type: tipo, 'data-k': k, autocomplete: ac || 'off', value: x[k] || '', maxlength: 160 });
+      el.addEventListener('input', avisar); return h('div', { class: 'field' }, h('label', { for: el.id }, l), el); };
+    const area = h('select', { class: 'input', id: id('area'), 'data-k': 'area' }, h('option', { value: '' }, 'Selecciona…'), AREAS.map((o) => h('option', { value: o }, o)));
+    area.value = x.area || ''; area.addEventListener('change', avisar);
+    const quitar = h('button', { type: 'button', class: 'link small' }, 'Quitar');
+    const el = h('div', { class: 'contacto' }, inp('nombre', 'Nombre', 'text', 'off'), h('div', { class: 'field' }, h('label', { for: area.id }, 'Área'), area),
+      inp('puesto', 'Puesto', 'text'), inp('telefono', 'Teléfono', 'tel'), inp('correo', 'Correo', 'email'), h('div', { class: 'contacto-quitar' }, quitar));
+    quitar.addEventListener('click', () => { el.remove(); avisar(); const f = filas.querySelector('input'); if (f) f.focus(); else agregar.focus(); });
+    return el;
+  };
+  (Array.isArray(v) ? v : []).forEach((x) => filas.appendChild(fila(x)));
+  const agregar = h('button', { type: 'button', class: 'btn btn-sm' }, '+ Agregar contacto');
+  agregar.addEventListener('click', () => { const el = fila({}); filas.appendChild(el); el.querySelector('input').focus(); });
+  return h('fieldset', { class: 'field span-2 choice' + (ver ? ' invalid' : ''), id: 'w-' + c.k, 'aria-describedby': desc },
+    h('legend', { class: 'label' }, c.l), help, filas, h('div', null, agregar), err);
+}
+
 function pintarErrores(pasoId) {
   const p = PASOS.find((x) => x.id === pasoId);
   if (!p) return;
@@ -279,7 +316,7 @@ const pronto = debounce(() => guardar(), 800);
 function estadoGuardado(t, mal) { guard.texto = t; guard.mal = !!mal; if (guard.el) { guard.el.textContent = t; guard.el.classList.toggle('bad', !!mal); } }
 
 async function guardar() {
-  if (!prov || !['captura', 'correccion'].includes(prov.estado)) return;
+  if (!prov || !['captura', 'correccion', 'aprobado'].includes(prov.estado)) return;
   pronto.cancel();
   if (guard.vuelo) { guard.otra = true; return guard.vuelo; }
   guard.dirty = false;
@@ -318,7 +355,7 @@ function pasoDatos(card, barra, pasoId) {
       if (Object.keys(e).length) { const f = root.querySelector('.field.invalid input, .field.invalid select'); if (f) f.focus(); return; }
       busy(go, true, 'Generando folio…');
       try {
-        const r = await P.iniciar(borrador.datos);
+        const r = await P.iniciar(borrador.datos, directorio ? 'actual' : 'nuevo');
         prov = r.prov; docs = []; errores = validar(prov.datos);
         borrador = { datos: {} }; try { sessionStorage.removeItem(DRAFT); } catch (x) { /* nada */ }
         await credenciales(r.clave, true);
@@ -345,7 +382,8 @@ function pasoDatos(card, barra, pasoId) {
       const f = root.querySelector('.field.invalid input, .field.invalid select, .field.invalid'); if (f) { f.scrollIntoView({ block: 'center' }); if (f.focus) f.focus({ preventScroll: true }); }
       return;
     }
-    ir(prov.estado === 'correccion' ? 'estado' : PASOS_UI[idx + 1].id);
+    if (prov.estado === 'aprobado') toast('Datos actualizados.', 'ok');
+    ir(['correccion', 'aprobado'].includes(prov.estado) ? 'estado' : PASOS_UI[idx + 1].id);
   });
   mount(barra, idx > 1 ? h('button', { type: 'button', class: 'btn', onclick: () => ir(PASOS_UI[idx - 1].id) }, 'Anterior') : null,
     h('span', { class: 'spacer' }), h('span', { class: 'small muted' }, 'Se guarda automáticamente'), next);
@@ -443,7 +481,7 @@ function resumen(pasoId, editar) {
     h('div', { class: 'row', style: { marginBottom: '12px' } }, h('h2', { style: { fontSize: '16px' } }, p.titulo), h('span', { class: 'spacer' }),
       editar ? h('button', { type: 'button', class: 'link', onclick: () => ir(pasoId) }, 'Editar') : null),
     h('dl', { class: 'kv' }, p.campos.filter((c) => aplica(c, d)).filter((c) => c.req ||(d[c.k] !== undefined && d[c.k] !== '' && !(Array.isArray(d[c.k]) && !d[c.k].length)))
-      .map((c) => [h('dt', null, c.l), h('dd', null, lista(d[c.k]))])));
+      .map((c) => [h('dt', null, c.l), h('dd', { style: c.t === 'contactos' ? { whiteSpace: 'pre-line' } : null }, valorTxt(c, d[c.k]))])));
 }
 
 function pasoEnvio(card, barra) {
@@ -520,7 +558,17 @@ function estado() {
     alertasEl.push(h('section', { class: 'card card-pad', 'aria-labelledby': 'fix-t' }, h('h2', { id: 'fix-t', style: { fontSize: '18px', marginBottom: '14px' } }, 'Documentos por corregir'), zona, boton,
       h('p', { class: 'small muted', style: { marginTop: '12px' } }, '¿También debes actualizar datos? ', h('button', { type: 'button', class: 'link', onclick: () => ir('empresa') }, 'Editar datos de la empresa'))));
   } else if (prov.estado === 'aprobado') {
-    alertasEl.push(tarjetaAlerta('ok', 'check', '¡Tu registro fue aprobado!', 'Tu empresa quedó dada de alta como proveedor. El equipo de Logística de CESANTONI se pondrá en contacto contigo.'));
+    alertasEl.push(prov.tipo === 'actual'
+      ? tarjetaAlerta('ok', 'check', 'Tu registro está validado', 'Ya formas parte del directorio de proveedores de CESANTONI. Cuando cambie un contacto o venza un documento, actualízalo aquí.')
+      : tarjetaAlerta('ok', 'check', '¡Tu registro fue aprobado!', 'Tu empresa quedó dada de alta como proveedor. El equipo de Logística de CESANTONI se pondrá en contacto contigo.'));
+    const zona = h('div', { class: 'docs-grid' });
+    const pintarDocs = () => mount(zona, P.tablero(prov, docs).filter((t) => t.requerido || t.actual).map((t) => tarjetaDocumento(t, pintarDocs)));
+    pintarDocs();
+    alertasEl.push(h('section', { class: 'card card-pad', 'aria-labelledby': 'act-t' },
+      h('div', { class: 'row', style: { marginBottom: '6px' } }, h('h2', { id: 'act-t', style: { fontSize: '18px' } }, 'Mantén tu información al día'), h('span', { class: 'spacer' }),
+        h('button', { type: 'button', class: 'btn btn-sm', onclick: () => ir('empresa') }, 'Actualizar datos y contactos')),
+      h('p', { class: 'small muted', style: { marginTop: 0, marginBottom: '14px' } }, 'Sube la versión nueva de un documento cuando se renueve (opinión de cumplimiento, póliza, permisos…). El equipo de Logística la revisa y te avisa si necesita algo.'),
+      zona));
   } else if (prov.estado === 'rechazado') {
     alertasEl.push(tarjetaAlerta('bad', 'alert', 'Tu registro no fue aprobado', 'Si tienes dudas sobre la resolución, comunícate con tu contacto de Logística de CESANTONI.'));
   } else {

@@ -62,6 +62,20 @@ resolución, historial, correos con vista previa, destinatarios, usuarios, siste
   Los que fallen quedan en *Panel > Correos* para reintentar o borrar.
 - Sin lectura automática (OCR): las fechas y vigencias se revisan manualmente.
 
+## Directorio de proveedores actuales
+
+Liga para los proveedores con los que ya se trabaja: `https://proveedores-cesantoni.github.io/directorio/`
+(equivale a `https://proveedores-cesantoni.github.io/?directorio`; también se copia desde *Panel > Directorio*).
+
+- Siguen el mismo registro (folio, clave, datos y documentos) y en el panel aparecen con la etiqueta «Proveedor actual».
+- En *Empresa* pueden agregar **más contactos por área** (dirección, tráfico, monitoreo, facturación, cobranza…).
+- *Panel > Directorio* reúne a los proveedores actuales y a los aprobados con todas sus personas de contacto,
+  con búsqueda, filtro por área y CSV de contactos (un renglón por persona).
+- Ya aprobado, el proveedor entra con su folio y clave para **actualizar datos, contactos y documentos** sin perder su estado.
+  Cada documento nuevo queda «Por revisar», llega la alerta «Documento actualizado» a los destinatarios de «Registro completo»
+  y aparece en *Tablero > Documentos actualizados por revisar*.
+- Requiere publicar la versión actual de `firestore.rules` (Firebase > Firestore Database > Reglas > Publicar).
+
 ## Resumen diario, fotos y aviso de privacidad
 
 - **Resumen diario** (Apps Script `apps-script-correo`, función `instalarResumen`): a las 8:00 envía a los destinatarios con

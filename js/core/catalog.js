@@ -18,6 +18,9 @@ const tiene = (d, s) => (d.servicios || []).includes(s);
 /* Los datos de unidades se piden si aún no elige servicios o si ofrece transporte. */
 const conTransporte = (d) => !(d.servicios || []).length || (d.servicios || []).some((s) => TRANSPORTE.includes(s));
 const esForwarder = (d) => tiene(d, SRV.forwarder), conAlmacen = (d) => tiene(d, SRV.almacen), conManiobras = (d) => tiene(d, SRV.maniobras);
+export const AREAS = ['Dirección', 'Comercial / Ventas', 'Tráfico / Operaciones', 'Monitoreo', 'Facturación', 'Cobranza', 'Seguridad', 'Otra'];
+/* Origen del registro: alta nueva (portal) o proveedor con el que ya se trabaja (liga del directorio). */
+export const TIPOS_PROV = { nuevo: 'Alta nueva', actual: 'Proveedor actual' };
 export const UNIDADES = ["Caja seca 53'", "Caja seca 48'", 'Full (doble remolque)', 'Torton', 'Rabón', 'Camioneta 3.5 t', 'Plataforma'];
 
 export const PASOS = [
@@ -40,7 +43,8 @@ export const PASOS = [
     { k: 'web', l: 'Sitio web', t: 'text', max: 200, ac: 'url' },
     { k: 'ops_nombre', l: 'Contacto de operaciones', t: 'text', max: 120 },
     { k: 'ops_telefono', l: 'Teléfono de operaciones', t: 'tel' },
-    { k: 'ops_correo', l: 'Correo de operaciones', t: 'email' }] },
+    { k: 'ops_correo', l: 'Correo de operaciones', t: 'email' },
+    { k: 'contactos', l: 'Más contactos', t: 'contactos', wide: true, help: 'Agrega a las personas que atienden cada área: dirección, tráfico, monitoreo, facturación, cobranza, etc.' }] },
   { id: 'operacion', titulo: 'Operación', sub: 'Servicios y cobertura', intro: 'Qué servicios ofreces, dónde operas y cómo monitoreas tus unidades.', campos: [
     { k: 'servicios', l: 'Tipo de servicio', t: 'multi', req: true, op: SERVICIOS, help: 'Marca todos los que ofreces. Según lo que elijas te pediremos los datos de flota, forwarder, almacenes o maniobras.' },
     { k: 'cobertura', l: 'Cobertura nacional', t: 'multi', req: true, op: [TODA, ...ESTADOS_MX], help: 'Marca «Toda la República» o los estados donde operas.' },
@@ -124,7 +128,36 @@ export const ALERTAS = { revisarDias: 2, correccionDias: 5, abandonoDias: 7, ven
 
 export const emailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || '').trim());
 
+const MAX_CONTACTOS = 15;
+const CONTACTO_K = ['nombre', 'area', 'puesto', 'telefono', 'correo'];
+export const contactoTxt = (x) => [(x.nombre || '') + (x.area ? ' (' + x.area + ')' : ''), x.puesto, x.telefono, x.correo].filter(Boolean).join(' · ');
+/* Texto de un dato para resúmenes, expediente y CSV. */
+export function valorTxt(campo, v) {
+  if (campo && campo.t === 'contactos') return Array.isArray(v) && v.length ? v.map(contactoTxt).join('\n') : '—';
+  return Array.isArray(v) ? (v.length ? v.join(', ') : '—') : (v === '' || v === null || v === undefined ? '—' : String(v));
+}
+function errorContactos(lista) {
+  for (const x of lista) {
+    if (!x.nombre) return 'Escribe el nombre de cada contacto (o quita los renglones vacíos).';
+    if (!x.telefono && !x.correo) return 'Escribe un teléfono o un correo para ' + x.nombre + '.';
+    if (x.correo && !emailOk(x.correo)) return 'El correo de ' + x.nombre + ' no es válido.';
+    const dig = x.telefono.replace(/\D/g, '').length;
+    if (x.telefono && (dig < 7 || dig > 15)) return 'El teléfono de ' + x.nombre + ' debe tener de 7 a 15 dígitos.';
+  }
+  return '';
+}
+
 export function normalizar(campo, v) {
+  if (campo.t === 'contactos') {
+    if (!Array.isArray(v)) return [];
+    return v.filter((x) => x && typeof x === 'object').slice(0, MAX_CONTACTOS).map((x) => {
+      const o = {};
+      CONTACTO_K.forEach((k) => { o[k] = typeof x[k] === 'string' || typeof x[k] === 'number' ? String(x[k]).trim().slice(0, 160) : ''; });
+      o.correo = o.correo.toLowerCase();
+      if (!AREAS.includes(o.area)) o.area = '';
+      return o;
+    }).filter((x) => CONTACTO_K.some((k) => x[k]));
+  }
   if (campo.t === 'multi') return Array.isArray(v) ? campo.op.filter((o) => v.includes(o)) : [];
   if (v === null || v === undefined || typeof v === 'object') return '';
   let s = String(v).trim().slice(0, 1000);
@@ -143,6 +176,7 @@ export function validar(datos) {
       const dig = String(v || '').replace(/\D/g, '').length;
       if (c.req && vacio) e[c.k] = 'Este dato es obligatorio.';
       else if (vacio) return;
+      else if (c.t === 'contactos') { const m = errorContactos(v); if (m) e[c.k] = m; }
       else if (c.t === 'email' && !emailOk(v)) e[c.k] = 'Escribe un correo válido (ejemplo: nombre@empresa.com).';
       else if (c.t === 'tel' && (dig < 7 || dig > 15)) e[c.k] = 'Escribe un teléfono de 7 a 15 dígitos.';
       else if (c.t === 'number' && (isNaN(Number(v)) || Number(v) < (c.min || 0) || Number(v) > c.max)) e[c.k] = 'Escribe un número válido.';

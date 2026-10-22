@@ -1,8 +1,8 @@
 /* Operaciones del equipo interno (panel). Las reglas de Firestore limitan todo al personal activo. */
-import { fb, auth, db, CFG, COL, ref, col, getOne, getAll, where, now, newId, emulate, portalUrl, panelUrl, AppError } from './firebase.js?v=13';
-import { DOCS, ESTADOS, REVISION, ALERTAS, docLabel, requeridos, emailOk } from './catalog.js?v=13';
-import { enviar as enviarCorreo, reintentar as reintentarCorreo } from './mail.js?v=13';
-import { diasDesde, diasHasta } from './ui.js?v=13';
+import { fb, auth, db, CFG, COL, ref, col, getOne, getAll, where, now, newId, emulate, portalUrl, panelUrl, AppError } from './firebase.js?v=14';
+import { DOCS, ESTADOS, REVISION, ALERTAS, docLabel, requeridos, emailOk } from './catalog.js?v=14';
+import { enviar as enviarCorreo, reintentar as reintentarCorreo } from './mail.js?v=14';
+import { diasDesde, diasHasta } from './ui.js?v=14';
 
 const claveOk = (p) => String(p).length >= 10 && /[A-Za-z]/.test(p) && /\d/.test(p);
 const CLAVE_MSG = 'La contraseña debe tener al menos 10 caracteres, con letras y números.';
@@ -81,6 +81,21 @@ export function resumenDocs(p) {
     correccion: det.filter((d) => d.estado === 'correccion').length, det };
 }
 
+/* Documentos con una versión entregada que aún no se revisa (p. ej. la renovación que sube un proveedor aprobado). */
+export function porRevisar(p) {
+  const rev = p.revisiones || {};
+  return Object.entries(p.entregados || {}).filter(([k, v]) => !rev[k] || rev[k].version !== v).map(([k]) => k);
+}
+
+/* Todas las personas de contacto de un proveedor: quien registró, operaciones y los contactos por área. */
+export function contactosDe(p) {
+  const d = p.datos || {}, out = [];
+  if (p.contacto || p.correo) out.push({ nombre: p.contacto || '', area: 'Contacto principal', puesto: d.puesto || '', telefono: p.telefono || '', correo: p.correo || '' });
+  if (d.ops_nombre || d.ops_correo || d.ops_telefono) out.push({ nombre: d.ops_nombre || '', area: 'Operaciones', puesto: '', telefono: d.ops_telefono || '', correo: d.ops_correo || '' });
+  (Array.isArray(d.contactos) ? d.contactos : []).forEach((x) => out.push({ nombre: x.nombre || '', area: x.area || 'Sin área', puesto: x.puesto || '', telefono: x.telefono || '', correo: x.correo || '' }));
+  return out;
+}
+
 export async function detalle(uid) {
   const p = await getOne(ref(COL.prov, uid));
   if (!p) throw new AppError('Proveedor no encontrado.', 404);
@@ -145,7 +160,8 @@ export async function notificar(p) {
 
 export async function resolver(p, docs, { resultado, notas, responsableId, equipo }) {
   const patch = { actualizado_en: now() }, cambios = [];
-  if (resultado && resultado !== p.resultado) {
+  // También cuenta como cambio volver a aprobar (o rechazar) a quien ya tenía ese resultado pero regresó a revisión por una actualización.
+  if (resultado && (resultado !== p.resultado || (['aprobado', 'rechazado'].includes(resultado) && p.estado !== resultado))) {
     if (p.estado === 'captura') throw new AppError('El proveedor aún no envía su registro.', 409);
     if (resultado === 'aprobado') {
       const vig = docs.filter((d) => d.vigente);
@@ -196,7 +212,9 @@ export function alertas(provs, correos) {
   }));
   vence.sort((a, b) => a.dias - b.dias);
   const fallidos = (correos || []).filter((c) => c.estado === 'error');
-  return { revisar, correccion, abandono, vence, fallidos };
+  const actualizados = provs.filter((p) => p.estado === 'aprobado' && porRevisar(p).length)
+    .map((p) => ({ ...por(p), docs: porRevisar(p).map(docLabel), dias: diasDesde(p.actualizado_en) })).sort((a, b) => b.dias - a.dias);
+  return { revisar, correccion, abandono, vence, fallidos, actualizados };
 }
 
 /* ------------------------------------------------------------ correos, destinatarios, usuarios */

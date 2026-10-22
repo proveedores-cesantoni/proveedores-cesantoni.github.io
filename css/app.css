@@ -123,6 +123,16 @@ fieldset.choice .count:empty { display: none; }
 fieldset.choice .help { margin-bottom: 12px; }
 fieldset.choice.invalid { border-color: var(--bad); }
 .tiles { display: grid; gap: 10px; margin-top: 10px; }
+/* Contactos por área (portal) */
+.dir-contactos { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 240px; }
+.dir-contactos .tag { font-size: 11px; padding: 1px 8px; }
+.contactos { display: grid; gap: 10px; margin: 10px 0 12px; }
+.contactos:empty { display: none; }
+.contacto { display: grid; grid-template-columns: 1.2fr 1.3fr .9fr .9fr 1.4fr auto; gap: 10px; align-items: end; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.contacto .field { margin: 0; min-width: 0; }
+.contacto-quitar { padding-bottom: 12px; }
+@media (max-width: 900px) { .contacto { grid-template-columns: 1fr 1fr; } .contacto-quitar { padding-bottom: 0; } }
+@media (max-width: 640px) { .contacto { grid-template-columns: 1fr; } }
 .tiles-lg { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 .tiles-md { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .tiles-sm { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }

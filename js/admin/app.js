@@ -1,15 +1,19 @@
 /* Panel del equipo de Logística. */
-import { start, configured, friendly, CFG } from '../core/firebase.js?v=13';
-import { PASOS, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, docLabel, requeridos, visible, aplica } from '../core/catalog.js?v=13';
-import * as E from '../core/equipo.js?v=13';
-import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=13';
-import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=13';
+import { start, configured, friendly, CFG } from '../core/firebase.js?v=14';
+import { PASOS, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=14';
+import * as E from '../core/equipo.js?v=14';
+import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=14';
+import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=14';
+import { portalUrl } from '../core/firebase.js?v=14';
 
 const root = document.getElementById('app');
 let yo = null, cache = { provs: null, correos: null };
 const esAdmin = () => yo && yo.rol === 'admin';
 const fail = (e) => toast(friendly(e).message, 'bad');
 const etiquetaEstado = (s) => tag((ESTADOS[s] || {}).tag || '', (ESTADOS[s] || { l: s }).l);
+const etiquetaTipo = (p) => (p.tipo === 'actual' ? tag('accent', TIPOS_PROV.actual) : null);
+/* Liga que se comparte con los proveedores con los que ya se trabaja. */
+const ligaDirectorio = () => new URL('directorio/', portalUrl()).href;
 
 /* Cada celda lleva el nombre de su columna: cuando la tabla no cabe, se muestra como tarjetas sin cortar el texto. */
 function etiquetarTablas() {
@@ -100,7 +104,7 @@ function despues() {
 }
 
 /* ------------------------------------------------------------ estructura */
-const MENU = [['Operación'], ['tablero', 'Tablero', 'grid'], ['proveedores', 'Proveedores', 'list'], ['correos', 'Correos', 'mail'],
+const MENU = [['Operación'], ['tablero', 'Tablero', 'grid'], ['proveedores', 'Proveedores', 'list'], ['directorio', 'Directorio', 'users'], ['correos', 'Correos', 'mail'],
   ['Configuración'], ['destinatarios', 'Destinatarios', 'bell'], ['usuarios', 'Usuarios', 'users', true], ['sistema', 'Sistema', 'gear'], ['cuenta', 'Mi cuenta', 'key']];
 let main = null;
 function shell(activo) {
@@ -120,6 +124,8 @@ async function insignias() {
     const provs = cache.provs || await E.proveedores();
     const n = provs.filter((p) => p.estado === 'enviado').length;
     const b = root.querySelector('[data-badge="proveedores"]'); if (b) { b.textContent = n; b.hidden = !n; }
+    const a = provs.filter((p) => p.estado === 'aprobado' && E.porRevisar(p).length).length;
+    const bd = root.querySelector('[data-badge="directorio"]'); if (bd) { bd.textContent = a; bd.hidden = !a; }
   } catch (e) { /* sin insignias */ }
 }
 function cabecera(titulo, sub, ...acciones) {
@@ -133,6 +139,7 @@ async function ruta() {
   try {
     if (m) return await expediente(m[1]);
     if (p === 'proveedores') return await listado(new URLSearchParams(q || ''));
+    if (p === 'directorio') return await vistaDirectorio();
     if (p === 'correos') return await vistaCorreos();
     if (p === 'destinatarios') return await vistaDestinatarios();
     if (p === 'usuarios' && esAdmin()) return await vistaUsuarios();
@@ -161,7 +168,7 @@ async function tablero() {
   const bloque = (tipo, ico, titulo, texto, items, pintarFila, vacio) => h('div', { class: 'alert-card a-' + tipo },
     h('div', { class: 'ico' }, icon(ico)), h('div', null, h('h3', null, titulo), h('p', null, items.length ? texto : vacio)), h('div', { class: 'count' }, String(items.length)),
     items.length ? h('ul', { class: 'alert-list' }, items.slice(0, 6).map(pintarFila)) : null);
-  mount(main, cabecera('Tablero', 'Resumen y alertas del registro de proveedores', h('a', { class: 'btn btn-dark', href: '#/proveedores' }, 'Ver proveedores')),
+  mount(main, cabecera('Tablero', 'Resumen y alertas del registro de proveedores', h('a', { class: 'btn', href: '#/directorio' }, 'Directorio'), h('a', { class: 'btn btn-dark', href: '#/proveedores' }, 'Ver proveedores')),
     h('div', { class: 'kpis' },
       kpi(provs.length, 'Registros totales', 'var(--ink)', '#/proveedores'),
       kpi(cuenta('captura'), 'En captura', '#9DB3CC', '#/proveedores?estado=captura'),
@@ -175,6 +182,8 @@ async function tablero() {
         (x) => fila(x, tag(x.dias >= ALERTAS.revisarDias ? 'bad' : 'violet', x.dias ? 'hace ' + plural(x.dias, 'día', 'días') : 'hoy')), 'No hay registros esperando revisión.'),
       bloque('warn', 'alert', 'Correcciones sin respuesta', 'Proveedores con corrección solicitada hace ' + ALERTAS.correccionDias + ' días o más.', A.correccion,
         (x) => fila(x, tag('warn', plural(x.dias, 'día', 'días'))), 'Ningún proveedor tiene correcciones atrasadas.'),
+      bloque('violet', 'doc', 'Documentos actualizados por revisar', 'Proveedores aprobados que subieron una versión nueva de un documento.', A.actualizados,
+        (x) => fila(x, h('span', { class: 'small' }, x.docs.join(', '))), 'Ningún proveedor aprobado tiene documentos nuevos por revisar.'),
       bloque('accent', 'cal', 'Documentos por vencer', 'Pólizas y permisos aprobados que vencen en ' + ALERTAS.venceDias + ' días o menos.', A.vence,
         (x) => fila(x, [h('span', { class: 'small' }, x.doc), tag(x.dias < 0 ? 'bad' : 'warn', x.dias < 0 ? 'vencido ' + fecha(x.fecha + 'T12:00:00') : 'vence ' + fecha(x.fecha + 'T12:00:00'))]),
         'Sin vencimientos próximos. Captura la fecha de vencimiento al aprobar pólizas y permisos.'),
@@ -191,13 +200,14 @@ async function listado(params) {
   shell('proveedores');
   mount(main, cabecera('Proveedores'), cargando());
   const provs = cache.provs = await E.proveedores();
-  const f = { q: params.get('q') || '', estado: params.get('estado') || '', pais: '', cobertura: '', servicio: '', desde: '', hasta: '', orden: 'reciente', pagina: 1 };
+  const f = { q: params.get('q') || '', estado: params.get('estado') || '', tipo: params.get('tipo') || '', pais: '', cobertura: '', servicio: '', desde: '', hasta: '', orden: 'reciente', pagina: 1 };
   const POR = 25;
   const cont = h('div');
   const q = h('input', { class: 'input', id: 'f-q', type: 'search', placeholder: 'Folio, empresa, RFC, contacto o correo', value: f.q });
   const pais = select([['', 'Todos los países'], ...PAISES.map((p) => [p, p])], '', { id: 'f-pais' });
   const cob = select([['', 'Cualquier cobertura'], ['nacional', 'Solo México'], ['centroamerica', 'Con Centroamérica'], ...CENTROAMERICA.map((p) => [p, 'Centroamérica: ' + p])], '', { id: 'f-cob' });
   const serv = select([['', 'Todos los servicios'], ...SERVICIOS.map((s) => [s, s])], '', { id: 'f-serv' });
+  const tipo = select([['', 'Todos'], ['actual', 'Proveedores actuales'], ['nuevo', 'Altas nuevas']], f.tipo, { id: 'f-tipo' });
   const orden = select([['reciente', 'Actividad reciente'], ['empresa', 'Empresa A–Z'], ['inicio', 'Fecha de inicio'], ['envio', 'Fecha de envío']], 'reciente', { id: 'f-orden' });
   const desde = h('input', { class: 'input', type: 'date', id: 'f-desde' }), hasta = h('input', { class: 'input', type: 'date', id: 'f-hasta' });
   const seg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Estado' });
@@ -205,7 +215,8 @@ async function listado(params) {
     const txt = f.q.toLowerCase();
     let r = provs.filter((p) => {
       const d = p.datos || {}, ca = d.centroamerica || [];
-      if (txt && ![p.folio, p.razon_social, d.nombre_comercial, d.rfc, p.contacto, p.correo].join(' ').toLowerCase().includes(txt)) return false;
+      if (txt && ![p.folio, p.razon_social, d.nombre_comercial, d.rfc, ...E.contactosDe(p).flatMap((c) => [c.nombre, c.correo, c.telefono])].join(' ').toLowerCase().includes(txt)) return false;
+      if (f.tipo && (p.tipo === 'actual' ? 'actual' : 'nuevo') !== f.tipo) return false;
       if (f.pais && p.pais !== f.pais) return false;
       if (f.servicio && !(d.servicios || []).includes(f.servicio)) return false;
       if (f.cobertura === 'nacional' && ca.length) return false;
@@ -238,7 +249,7 @@ async function listado(params) {
           const tr = h('tr', { class: 'go', tabindex: '0' },
             h('td', null, h('a', { class: 'folio', href: '#/proveedor/' + p.id }, p.folio)),
             h('td', null, h('strong', null, p.razon_social || '—'), h('div', { class: 'cell-sub' }, [d.nombre_comercial, d.rfc].filter(Boolean).join(' · '))),
-            h('td', null, etiquetaEstado(p.estado)),
+            h('td', null, etiquetaEstado(p.estado), p.tipo === 'actual' ? h('div', { style: { marginTop: '4px' } }, etiquetaTipo(p)) : null),
             h('td', null, h('div', { class: 'meter', 'aria-hidden': 'true' }, rd.det.map((x) => h('i', { class: { falta: '', pendiente: 'up', aprobado: 'ok', correccion: 'bad', rechazado: 'bad' }[x.estado] || '', title: docLabel(x.k) }))),
               h('div', { class: 'cell-sub' }, rd.entregados + ' de ' + rd.req + (rd.aprobados ? ' · ' + rd.aprobados + ' aprobados' : ''))),
             h('td', null, p.contacto, h('div', { class: 'cell-sub' }, p.correo), h('div', { class: 'cell-sub' }, p.telefono)),
@@ -257,13 +268,13 @@ async function listado(params) {
           h('button', { type: 'button', class: 'btn btn-sm', disabled: f.pagina >= paginas, onclick: () => { f.pagina++; pintar(); } }, 'Siguiente'))) : null);
   };
   q.addEventListener('input', debounce(() => { f.q = q.value.trim(); f.pagina = 1; pintar(); }, 250));
-  [[pais, 'pais'], [cob, 'cobertura'], [serv, 'servicio'], [orden, 'orden'], [desde, 'desde'], [hasta, 'hasta']].forEach(([el, k]) => el.addEventListener('change', () => { f[k] = el.value; f.pagina = 1; pintar(); }));
-  const limpiar = h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => { Object.assign(f, { q: '', estado: '', pais: '', cobertura: '', servicio: '', desde: '', hasta: '' }); [q, pais, cob, serv, desde, hasta].forEach((x) => { x.value = ''; }); pintar(); } }, 'Limpiar filtros');
+  [[pais, 'pais'], [cob, 'cobertura'], [serv, 'servicio'], [tipo, 'tipo'], [orden, 'orden'], [desde, 'desde'], [hasta, 'hasta']].forEach(([el, k]) => el.addEventListener('change', () => { f[k] = el.value; f.pagina = 1; pintar(); }));
+  const limpiar = h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => { Object.assign(f, { q: '', estado: '', tipo: '', pais: '', cobertura: '', servicio: '', desde: '', hasta: '' }); [q, pais, cob, serv, tipo, desde, hasta].forEach((x) => { x.value = ''; }); pintar(); } }, 'Limpiar filtros');
   const exportar = h('button', { type: 'button', class: 'btn btn-dark' }, 'Exportar CSV');
   exportar.addEventListener('click', () => exportarCsv(filtrar().r));
   mount(main, cabecera('Proveedores', 'Busca, filtra y abre cada expediente', exportar),
     h('section', { class: 'card card-pad stack' }, h('div', { class: 'toolbar' }, field('Buscar', q), field('País', pais), field('Cobertura', cob), field('Servicio', serv), field('Ordenar', orden)),
-      h('div', { class: 'row' }, field('Registrado desde', desde), field('Hasta', hasta), h('span', { class: 'spacer' }), limpiar), seg), cont);
+      h('div', { class: 'row' }, field('Tipo de proveedor', tipo), field('Registrado desde', desde), field('Hasta', hasta), h('span', { class: 'spacer' }), limpiar), seg), cont);
   pintar();
 }
 
@@ -279,14 +290,15 @@ function bloquesDatos(ps, d) {
 const EXTRA_CSV = PASOS.find((x) => x.id === 'operacion').campos.filter((c) => c.t !== 'sec' && /^(fw|alm|man)_/.test(c.k));
 
 function exportarCsv(provs) {
-  const cols = ['Folio', 'Estado', 'Resultado', 'Razón social', 'Nombre comercial', 'RFC', 'País', 'Contacto', 'Puesto', 'Correo', 'Teléfono', 'Domicilio', 'Ciudad', 'Estado (domicilio)', 'CP',
+  const cols = ['Folio', 'Tipo', 'Estado', 'Resultado', 'Razón social', 'Nombre comercial', 'RFC', 'País', 'Contacto', 'Puesto', 'Correo', 'Teléfono', 'Domicilio', 'Ciudad', 'Estado (domicilio)', 'CP',
     'Servicios', 'Cobertura nacional', 'Centroamérica', 'Tipos de unidad', 'Número de unidades', 'Monitoreo', 'GPS', 'Documentos entregados', 'Documentos aprobados', 'Responsable',
-    'Notas internas', 'Inicio', 'Envío', 'Actualización', ...EXTRA_CSV.map((c) => (c.k.startsWith('fw_') ? 'Forwarder: ' : c.k.startsWith('alm_') ? 'Almacenes: ' : 'Maniobras: ') + c.l)];
+    'Notas internas', 'Inicio', 'Envío', 'Actualización', 'Más contactos', ...EXTRA_CSV.map((c) => (c.k.startsWith('fw_') ? 'Forwarder: ' : c.k.startsWith('alm_') ? 'Almacenes: ' : 'Maniobras: ') + c.l)];
   const cel = (v) => { let s = String(v === null || v === undefined ? '' : v); if (/^[=+\-@]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
   const filas = provs.map((p) => { const d = p.datos || {}, r = E.resumenDocs(p);
-    return [p.folio, (ESTADOS[p.estado] || {}).l, p.resultado, p.razon_social, d.nombre_comercial, d.rfc, p.pais, p.contacto, d.puesto, p.correo, p.telefono,
+    return [p.folio, TIPOS_PROV[p.tipo === 'actual' ? 'actual' : 'nuevo'], (ESTADOS[p.estado] || {}).l, p.resultado, p.razon_social, d.nombre_comercial, d.rfc, p.pais, p.contacto, d.puesto, p.correo, p.telefono,
       [d.calle, d.colonia].filter(Boolean).join(', '), d.ciudad, d.estado, d.cp, lista(d.servicios), lista(d.cobertura), lista(d.centroamerica), lista(d.unidades),
       d.num_unidades, d.monitoreo, d.gps, r.entregados + ' de ' + r.req, r.aprobados, p.responsable, p.notas, fechaHora(p.creado_en), fechaHora(p.enviado_en), fechaHora(p.actualizado_en),
+      (d.contactos || []).length ? valorTxt({ t: 'contactos' }, d.contactos).replace(/\n/g, ' | ') : '',
       ...EXTRA_CSV.map((c) => (aplica(c, d) ? (Array.isArray(d[c.k]) ? d[c.k].join(', ') : d[c.k]) : ''))]; });
   const csv = '﻿' + [cols, ...filas].map((f) => f.map(cel).join(',')).join('\r\n');
   saveBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'Proveedores_CESANTONI_' + dia(new Date().toISOString()) + '.csv');
@@ -331,7 +343,7 @@ async function expediente(id) {
     const rd = E.resumenDocs(p), dd = p.datos || {};
     mount(cab, h('div', { class: 'dossier-head' },
       h('div', null, h('div', { class: 'folio' }, p.folio), h('div', { class: 'cell-sub' }, 'Actualizado ' + fechaHora(p.actualizado_en))),
-      h('div', null, h('h1', { id: 'exp-t', tabindex: '-1' }, p.razon_social), h('div', { class: 'row', style: { marginTop: '8px' } }, etiquetaEstado(p.estado),
+      h('div', null, h('h1', { id: 'exp-t', tabindex: '-1' }, p.razon_social), h('div', { class: 'row', style: { marginTop: '8px' } }, etiquetaEstado(p.estado), etiquetaTipo(p),
         tag(rd.entregados === rd.req ? 'ok' : '', 'Documentos ' + rd.entregados + '/' + rd.req), rd.aprobados ? tag('ok', rd.aprobados + ' aprobados') : null,
         rd.correccion ? tag('warn', rd.correccion + ' en corrección') : null)),
       h('div', { class: 'row' }, D.docs.some((d) => d.vigente && d.revision === 'correccion' && d.notificada === false)
@@ -352,7 +364,7 @@ async function expediente(id) {
     if (pestana === 'resolucion') return pintarResolucion();
     if (pestana === 'datos') return mount(cuerpo, h('section', { class: 'card card-pad' }, h('div', { class: 'data-groups' }, PASOS.map((ps) =>
       h('div', null, h('h3', null, ps.titulo), bloquesDatos(ps, p.datos || {}).map((b) => [b.t ? h('h4', { class: 'kv-sec' }, icon(b.icon || 'doc'), b.t) : null,
-        h('dl', { class: 'kv' }, b.items.map((c) => [h('dt', null, c.l), h('dd', null, lista((p.datos || {})[c.k]))]))]))))));
+        h('dl', { class: 'kv' }, b.items.map((c) => [h('dt', null, c.l), h('dd', { style: c.t === 'contactos' ? { whiteSpace: 'pre-line' } : null }, valorTxt(c, (p.datos || {})[c.k]))]))]))))));
     if (pestana === 'historial') return mount(cuerpo, h('section', { class: 'card card-pad' }, D.hist.length ? h('ul', { class: 'timeline' }, D.hist.map((x) =>
       h('li', null, h('time', null, fechaHora(x.creado_en)), h('div', null, h('strong', null, x.texto), h('div', { class: 'cell-sub' }, (x.actor_tipo === 'equipo' ? 'Equipo: ' : 'Proveedor: ') + (x.actor || '—')))))) : h('p', { class: 'muted' }, 'Sin movimientos.')));
     return mount(cuerpo, h('section', { class: 'card card-pad' }, D.correos.length ? h('ul', { class: 'timeline' }, D.correos.map((c) =>
@@ -460,6 +472,84 @@ async function expediente(id) {
   mount(main, h('a', { href: '#/proveedores', class: 'link' }, '← Proveedores'), cab, tabs, cuerpo);
   pintarCuerpo();
   document.getElementById('exp-t').focus({ preventScroll: true });
+}
+
+/* ------------------------------------------------------------ directorio */
+/* Proveedores con los que ya se trabaja (llegaron por la liga del directorio o ya están aprobados) y todas sus personas de contacto. */
+async function vistaDirectorio() {
+  shell('directorio');
+  mount(main, cabecera('Directorio'), cargando());
+  const provs = cache.provs = await E.proveedores();
+  const todos = provs.filter((p) => p.tipo === 'actual' || p.estado === 'aprobado').sort((a, b) => String(a.razon_social).localeCompare(String(b.razon_social), 'es'));
+  const f = { q: '', area: '', estado: '' };
+  const q = h('input', { class: 'input', id: 'dr-q', type: 'search', placeholder: 'Empresa, RFC, persona, correo o teléfono' });
+  const area = select([['', 'Todas las áreas'], ['Contacto principal', 'Contacto principal'], ['Operaciones', 'Operaciones'], ...AREAS.map((a) => [a, a])], '', { id: 'dr-area' });
+  const est = select([['', 'Todos'], ['aprobado', 'Validados'], ['proceso', 'En proceso'], ['docs', 'Con documentos por revisar']], '', { id: 'dr-estado' });
+  const cont = h('div');
+  const filtrar = () => {
+    const txt = f.q.toLowerCase();
+    return todos.filter((p) => {
+      const cs = E.contactosDe(p), d = p.datos || {};
+      if (txt && ![p.folio, p.razon_social, d.nombre_comercial, d.rfc, ...cs.flatMap((c) => [c.nombre, c.correo, c.telefono])].join(' ').toLowerCase().includes(txt)) return false;
+      if (f.area && !cs.some((c) => c.area === f.area)) return false;
+      if (f.estado === 'aprobado' && p.estado !== 'aprobado') return false;
+      if (f.estado === 'proceso' && p.estado === 'aprobado') return false;
+      if (f.estado === 'docs' && !E.porRevisar(p).length) return false;
+      return true;
+    });
+  };
+  const persona = (c) => h('li', null, h('div', null, h('strong', null, c.nombre || '—'), ' ', tag('', c.area)),
+    h('div', { class: 'cell-sub' }, [c.puesto, c.telefono, c.correo].filter(Boolean).join(' · ') || 'Sin teléfono ni correo'));
+  const pintar = () => {
+    const r = filtrar();
+    if (!r.length) {
+      mount(cont, h('div', { class: 'card empty' }, h('h2', null, todos.length ? 'Sin resultados' : 'El directorio está vacío'),
+        h('p', null, todos.length ? 'Ajusta la búsqueda o los filtros.' : 'Comparte la liga del directorio con los proveedores con los que ya trabajas. Aparecerán aquí en cuanto generen su folio.')));
+      return;
+    }
+    mount(cont, h('p', { class: 'small muted', role: 'status' }, plural(r.length, 'proveedor', 'proveedores') + ' · ' + plural(r.reduce((n, p) => n + E.contactosDe(p).length, 0), 'contacto', 'contactos')),
+      h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
+        h('thead', null, h('tr', null, ['Proveedor', 'Estado', 'Contactos', 'Servicios y flota', 'Documentos', 'Actualizado'].map((t) => h('th', { scope: 'col' }, t)))),
+        h('tbody', null, r.map((p) => {
+          const d = p.datos || {}, rd = E.resumenDocs(p), nuevos = p.estado === 'aprobado' ? E.porRevisar(p) : [];
+          return h('tr', null,
+            h('td', null, h('a', { class: 'folio', href: '#/proveedor/' + p.id }, p.folio), h('div', null, h('strong', null, p.razon_social || '—')),
+              h('div', { class: 'cell-sub' }, [d.nombre_comercial, d.rfc, [d.ciudad, d.estado].filter(Boolean).join(', ')].filter(Boolean).join(' · '))),
+            h('td', null, etiquetaEstado(p.estado), p.tipo === 'actual' ? h('div', { style: { marginTop: '4px' } }, etiquetaTipo(p)) : null),
+            h('td', null, h('ul', { class: 'dir-contactos' }, E.contactosDe(p).map(persona))),
+            h('td', null, lista(d.servicios), (d.unidades || []).length ? h('div', { class: 'cell-sub' }, (d.num_unidades ? d.num_unidades + ' unidades · ' : '') + d.unidades.join(', ')) : null),
+            h('td', null, h('div', null, rd.aprobados + ' de ' + rd.req + ' aprobados'),
+              nuevos.length ? h('div', { style: { marginTop: '4px' } }, tag('violet', plural(nuevos.length, 'nuevo por revisar', 'nuevos por revisar'))) : null),
+            h('td', null, fecha(p.actualizado_en)));
+        })))));
+  };
+  q.addEventListener('input', debounce(() => { f.q = q.value.trim(); pintar(); }, 250));
+  [[area, 'area'], [est, 'estado']].forEach(([el, k]) => el.addEventListener('change', () => { f[k] = el.value; pintar(); }));
+  const liga = ligaDirectorio();
+  const copiar = h('button', { type: 'button', class: 'btn btn-sm', onclick: () => copy(liga).then(() => toast('Liga copiada.', 'ok'), () => toast('No se pudo copiar; selecciónala y cópiala.', 'bad')) }, 'Copiar liga');
+  const exportar = h('button', { type: 'button', class: 'btn btn-dark' }, 'Exportar contactos (CSV)');
+  exportar.addEventListener('click', () => exportarContactos(filtrar()));
+  mount(main, cabecera('Directorio', 'Proveedores con los que trabajamos y sus contactos', exportar),
+    h('section', { class: 'card card-pad stack' },
+      h('div', null, h('h2', { style: { fontSize: '16px', marginBottom: '4px' } }, 'Liga para proveedores actuales'),
+        h('p', { class: 'small muted', style: { margin: '0 0 10px' } }, 'Envíala a los proveedores con los que ya trabajas. Registran su empresa, contactos y documentos; aquí aparecen como «Proveedor actual». Ya aprobados, pueden volver con su folio y clave para actualizar contactos y documentos.'),
+        h('div', { class: 'row' }, h('input', { class: 'input', id: 'dr-liga', readonly: true, value: liga, style: { flex: '1 1 320px', width: 'auto' }, onfocus: (ev) => ev.target.select() }), copiar)),
+      h('div', { class: 'toolbar', style: { gridTemplateColumns: 'minmax(220px,2fr) 1fr 1fr' } }, field('Buscar', q), field('Área de contacto', area), field('Mostrar', est))),
+    cont);
+  pintar();
+}
+
+/* Un renglón por persona de contacto, listo para Excel. */
+function exportarContactos(provs) {
+  const cols = ['Folio', 'Tipo', 'Estado', 'Razón social', 'Nombre comercial', 'RFC', 'Ciudad', 'Estado (domicilio)', 'Área', 'Nombre', 'Puesto', 'Teléfono', 'Correo', 'Servicios', 'Actualización'];
+  const cel = (v) => { let s = String(v === null || v === undefined ? '' : v); if (/^[=+\-@]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
+  const filas = [];
+  provs.forEach((p) => { const d = p.datos || {};
+    E.contactosDe(p).forEach((c) => filas.push([p.folio, TIPOS_PROV[p.tipo === 'actual' ? 'actual' : 'nuevo'], (ESTADOS[p.estado] || {}).l, p.razon_social, d.nombre_comercial, d.rfc,
+      d.ciudad, d.estado, c.area, c.nombre, c.puesto, c.telefono, c.correo, lista(d.servicios), fechaHora(p.actualizado_en)])); });
+  const csv = '\ufeff' + [cols, ...filas].map((r) => r.map(cel).join(',')).join('\r\n');
+  saveBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'Directorio_Proveedores_CESANTONI_' + dia(new Date().toISOString()) + '.csv');
+  toast(plural(filas.length, 'contacto exportado', 'contactos exportados') + '.', 'ok');
 }
 
 function previa(c) {

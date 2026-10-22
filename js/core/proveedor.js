@@ -1,7 +1,7 @@
 /* Operaciones del proveedor sobre Firebase. La seguridad real la imponen las reglas de Firestore. */
-import { fb, auth, db, COL, ref, col, getOne, getAll, now, newId, randomChars, sha256, portalUrl, panelUrl, AppError } from './firebase.js?v=13';
-import { PASOS, CAMPOS, DOCS, ACCEPT, MAX_MB, ESTADOS, docLabel, requeridos, validar, normalizar } from './catalog.js?v=13';
-import { enviar as enviarCorreo, destinatarios } from './mail.js?v=13';
+import { fb, auth, db, COL, ref, col, getOne, getAll, now, newId, randomChars, sha256, portalUrl, panelUrl, AppError } from './firebase.js?v=14';
+import { PASOS, CAMPOS, DOCS, ACCEPT, MAX_MB, ESTADOS, docLabel, requeridos, validar, normalizar } from './catalog.js?v=14';
+import { enviar as enviarCorreo, destinatarios } from './mail.js?v=14';
 
 const CHUNK = 700000;
 const nuevaClaveTxt = () => { const c = randomChars(8, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'); return c.slice(0, 4) + '-' + c.slice(4); };
@@ -39,6 +39,8 @@ export function tablero(prov, docs) {
     const fix = actual && actual.revision === 'correccion';
     let puede = false;
     if (prov.estado === 'captura') puede = true;
+    // Proveedor aprobado: puede subir la versión nueva de cualquier documento (queda por revisar).
+    else if (prov.estado === 'aprobado') puede = true;
     else if (prov.estado === 'correccion') puede = actual ? fix : req.includes(d.k);
     return { def: d, requerido: req.includes(d.k), actual, versiones, puede, correccion: fix ? { motivo: actual.motivo, notas: actual.notas } : null };
   });
@@ -56,7 +58,8 @@ export function pendientes(prov, docs) {
   return out;
 }
 
-export async function iniciar(entrada) {
+export async function iniciar(entrada, tipo) {
+  const actual = tipo === 'actual';
   const datos = {};
   PASOS[0].campos.forEach((c) => { datos[c.k] = normalizar(c, entrada[c.k]); });
   const errores = validar(datos).contacto || {};
@@ -70,7 +73,7 @@ export async function iniciar(entrada) {
   }
   const uid = cred.user.uid, t = now();
   let folio = '';
-  const prov = { folio, estado: 'captura', datos, razon_social: datos.razon_social, pais: datos.pais, contacto: datos.contacto, correo: datos.correo,
+  const prov = { folio, tipo: actual ? 'actual' : 'nuevo', estado: 'captura', datos, razon_social: datos.razon_social, pais: datos.pais, contacto: datos.contacto, correo: datos.correo,
     telefono: datos.telefono, acceso_correo: datos.correo, paso: 'empresa', envios: 0, creado_en: t, actualizado_en: t, enviado_en: null, reenviado_en: null,
     resuelto_en: null, resultado: 'pendiente', responsable_id: null, responsable: '', notas: '', entregados: {}, revisiones: {} };
   try {
@@ -82,18 +85,19 @@ export async function iniciar(entrada) {
       if (cs.exists()) tx.update(cref, { n }); else tx.set(cref, { n });
       tx.set(ref(COL.folios, folio), { correo: datos.correo, uid, n });
       tx.set(ref(COL.prov, uid), prov);
-      tx.set(ref(COL.prov, uid, 'historial', newId()), { tipo: 'inicio', texto: 'Folio ' + folio + ' generado.', actor: datos.correo, actor_tipo: 'proveedor', creado_en: t });
+      tx.set(ref(COL.prov, uid, 'historial', newId()), { tipo: 'inicio', texto: 'Folio ' + folio + ' generado' + (actual ? ' desde la liga de proveedores actuales.' : '.'), actor: datos.correo, actor_tipo: 'proveedor', creado_en: t });
     });
   } catch (e) { await cred.user.delete().catch(() => null); throw e; }
   prov.id = uid;
   await enviarCorreo({ plantilla: 'proveedor', tipo: 'bienvenida', proveedorId: uid, folio, para: datos.correo, secreto: true,
-    asunto: 'Tu folio de registro ' + folio + ' · CESANTONI', titulo: 'Tu registro está en marcha',
-    parrafos: ['Hola ' + datos.contacto + ', ya tienes folio de proveedor. Con estos datos puedes continuar desde cualquier dispositivo; tu avance se guarda solo.'],
+    asunto: 'Tu folio de registro ' + folio + ' · CESANTONI', titulo: actual ? 'Tu folio de proveedor' : 'Tu registro está en marcha',
+    parrafos: [actual ? 'Hola ' + datos.contacto + ', gracias por actualizar tus datos en el directorio de proveedores de CESANTONI. Con este folio y tu clave puedes continuar y, más adelante, actualizar tus contactos y documentos.'
+      : 'Hola ' + datos.contacto + ', ya tienes folio de proveedor. Con estos datos puedes continuar desde cualquier dispositivo; tu avance se guarda solo.'],
     datos: [['Folio', folio], ['Clave de acceso', clave], ['Empresa', datos.razon_social]],
-    boton: { texto: 'Continuar mi registro', url: portalUrl() }, nota: 'Si pierdes tu clave, en el portal elige «Olvidé mi clave».' });
-  await enviarCorreo({ plantilla: 'interno', tipo: 'inicio', proveedorId: uid, folio, para: await destinatarios('inicio'), etiqueta: 'NUEVO REGISTRO',
-    asunto: 'Alerta: nuevo registro iniciado ' + folio, titulo: datos.razon_social,
-    parrafos: ['Un proveedor generó su folio. Recibirás otra alerta cuando envíe el expediente completo.'],
+    boton: { texto: 'Continuar mi registro', url: portalUrl() + (actual ? '?directorio' : '') }, nota: 'Si pierdes tu clave, en el portal elige «Olvidé mi clave».' });
+  await enviarCorreo({ plantilla: 'interno', tipo: 'inicio', proveedorId: uid, folio, para: await destinatarios('inicio'), etiqueta: actual ? 'PROVEEDOR ACTUAL' : 'NUEVO REGISTRO',
+    asunto: 'Alerta: ' + (actual ? 'proveedor actual inició su registro ' : 'nuevo registro iniciado ') + folio, titulo: datos.razon_social,
+    parrafos: [(actual ? 'Un proveedor con el que ya trabajamos generó su folio desde la liga del directorio.' : 'Un proveedor generó su folio.') + ' Recibirás otra alerta cuando envíe el expediente completo.'],
     datos: [['Contacto', datos.contacto], ['Correo', datos.correo], ['Teléfono', datos.telefono], ['País', datos.pais]],
     boton: { texto: 'Ver en el panel', url: panelUrl() } });
   return { prov, clave };
@@ -123,7 +127,7 @@ export async function recuperar(folio, correo) {
 }
 
 export async function guardar(prov, cambios, paso) {
-  if (!['captura', 'correccion'].includes(prov.estado)) throw new AppError('Tu registro ya fue enviado y no se puede modificar.', 409);
+  if (!['captura', 'correccion', 'aprobado'].includes(prov.estado)) throw new AppError('Tu registro ya fue enviado y no se puede modificar.', 409);
   const datos = { ...(prov.datos || {}) };
   Object.keys(cambios || {}).forEach((k) => { if (CAMPOS[k]) datos[k] = normalizar(CAMPOS[k], cambios[k]); });
   if (datos.pais === 'México' && datos.rfc) datos.rfc = String(datos.rfc).replace(/[\s-]/g, '').toUpperCase();
@@ -165,6 +169,13 @@ export async function subir(prov, tipo, archivo, b64, progreso) {
   await b.commit();
   if (progreso) progreso(1);
   prov.entregados = entregados; prov.actualizado_en = fecha;
+  if (prov.estado === 'aprobado') {
+    await enviarCorreo({ plantilla: 'interno', tipo: 'actualizacion', proveedorId: prov.id, folio: prov.folio, para: await destinatarios('envio'),
+      etiqueta: 'DOCUMENTO ACTUALIZADO', asunto: 'Alerta: documento actualizado por revisar ' + prov.folio, titulo: prov.razon_social,
+      parrafos: ['Un proveedor aprobado subió una versión nueva de un documento. Revísala en su expediente.'],
+      datos: [['Documento', def.l], ['Versión', String(version)], ['Archivo', nombre], ['Contacto', prov.contacto], ['Correo', prov.correo]],
+      boton: { texto: 'Revisar en el panel', url: panelUrl() } });
+  }
   return { repetido: false, docs: await documentos(prov.id) };
 }
 
