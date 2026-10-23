@@ -20,12 +20,8 @@ const OPC_ICON = {
 };
 const DRAFT = 'cp_borrador';
 /* Liga para proveedores con los que ya se trabaja (…/?directorio o …/directorio/): arman el directorio y mantienen al día sus documentos. */
-const MODO = 'cp_modo';
-const directorio = (() => {
-  let v = /(^|[?&])directorio(=|&|$)/.test(location.search.slice(1));
-  try { if (v) sessionStorage.setItem(MODO, 'actual'); else v = sessionStorage.getItem(MODO) === 'actual'; } catch (e) { /* sin almacenamiento */ }
-  return v;
-})();
+/* Solo cuenta la dirección: la liga de alta y la del directorio no se mezclan aunque se abran en la misma pestaña. */
+const directorio = /(^|[?&])directorio(=|&|$)/.test(location.search.slice(1));
 let prov = null, docs = [], errores = {}, actual = '';
 const guard = { dirty: false, vuelo: null, otra: false, cambiados: {}, seq: 0, texto: 'Todo guardado', mal: false, el: null };
 let borrador = (() => { try { return JSON.parse(sessionStorage.getItem(DRAFT) || '{}'); } catch (e) { return {}; } })();
@@ -606,7 +602,7 @@ async function salir() {
   if (guard.dirty) await guardar();
   await P.salir().catch(() => null);
   prov = null; docs = []; errores = {};
-  history.replaceState(null, '', location.pathname);
+  history.replaceState(null, '', location.pathname + location.search);
   portada();
 }
 
