@@ -67,7 +67,8 @@ resolución, historial, correos con vista previa, destinatarios, usuarios, siste
 Liga para los proveedores con los que ya se trabaja: `https://proveedores-cesantoni.github.io/directorio/`
 (equivale a `https://proveedores-cesantoni.github.io/?directorio`; también se copia desde *Panel > Directorio*).
 
-- Siguen el mismo registro (folio, clave, datos y documentos) y en el panel aparecen con la etiqueta «Proveedor actual».
+- Registran solo contacto, datos de la empresa, contactos y documentos: **no capturan el paso «Operación»** (servicios, cobertura y flota).
+  En el panel aparecen con la etiqueta «Proveedor actual». El alta nueva (liga principal) no cambia.
 - En *Empresa* pueden agregar **más contactos por área** (dirección, tráfico, monitoreo, facturación, cobranza…).
 - *Panel > Directorio* reúne a los proveedores actuales y a los aprobados con todas sus personas de contacto,
   con búsqueda, filtro por área y CSV de contactos (un renglón por persona).

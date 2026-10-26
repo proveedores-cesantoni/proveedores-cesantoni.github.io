@@ -1,12 +1,14 @@
 /* Portal del proveedor. */
-import { start, configured, friendly, AppError } from '../core/firebase.js?v=14';
-import { PASOS, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=14';
-import * as P from '../core/proveedor.js?v=14';
-import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=14';
-import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=14';
+import { start, configured, friendly, AppError } from '../core/firebase.js?v=15';
+import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=15';
+import * as P from '../core/proveedor.js?v=15';
+import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=15';
+import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=15';
 
 const root = document.getElementById('app');
-const PASOS_UI = [...PASOS.map((p) => ({ id: p.id, t: p.titulo, s: p.sub })), { id: 'documentos', t: 'Documentos', s: 'PDF o imagen' }, { id: 'revision', t: 'Enviar', s: 'Revisa y envía' }];
+/* Pasos según el tipo: el proveedor actual (liga del directorio) no captura «Operación». */
+const tipoProv = () => (prov ? prov.tipo : directorio ? 'actual' : 'nuevo');
+const pasosUI = () => [...pasosDe(tipoProv()).map((p) => ({ id: p.id, t: p.titulo, s: p.sub })), { id: 'documentos', t: 'Documentos', s: 'PDF o imagen' }, { id: 'revision', t: 'Enviar', s: 'Revisa y envía' }];
 const PASO_ICON = { contacto: 'user', empresa: 'building', operacion: 'truck', documentos: 'doc', revision: 'send' };
 const TITULO_ICON = PASO_ICON;
 /* Íconos de las opciones de selección. */
@@ -34,7 +36,7 @@ async function init() {
   try {
     await start('portal');
     prov = await P.sesion();
-    if (prov) { docs = await P.documentos(prov.id); errores = validar(prov.datos || {}); }
+    if (prov) { docs = await P.documentos(prov.id); errores = validar(prov.datos || {}, prov.tipo); }
   } catch (e) { return fatal(root, 'No fue posible cargar el registro', friendly(e).message); }
   window.addEventListener('hashchange', ruta);
   window.addEventListener('pagehide', () => { if (guard.dirty) guardar(); });
@@ -45,14 +47,14 @@ function ir(pantalla) { if (location.hash === '#' + pantalla) ruta(); else locat
 function inicial() {
   if (!prov) return 'inicio';
   if (!['captura'].includes(prov.estado)) return 'estado';
-  return PASOS_UI.some((p) => p.id === prov.paso) ? prov.paso : 'empresa';
+  return pasosUI().some((p) => p.id === prov.paso) ? prov.paso : 'empresa';
 }
 function ruta() {
   const h0 = location.hash.replace(/^#\/?/, '');
   if (!prov) return h0 === 'contacto' ? asistente('contacto') : portada();
   if (h0 === 'estado' && prov.estado !== 'captura') return estado();
-  if (PASOS_UI.some((p) => p.id === h0) && h0 !== 'contacto' && prov.estado === 'captura') return asistente(h0);
-  if (['empresa', 'operacion'].includes(h0) && ['correccion', 'aprobado'].includes(prov.estado)) return asistente(h0);
+  if (pasosUI().some((p) => p.id === h0) && h0 !== 'contacto' && prov.estado === 'captura') return asistente(h0);
+  if (pasosDe(prov.tipo).some((p) => p.id === h0 && h0 !== 'contacto') && ['correccion', 'aprobado'].includes(prov.estado)) return asistente(h0);
   const d = inicial();
   history.replaceState(null, '', '#' + d);
   return d === 'estado' ? estado() : asistente(d);
@@ -110,7 +112,7 @@ function accesos() {
         ev.preventDefault(); err.hidden = true;
         if (!folio.value.trim() || !clave.value.trim()) { err.textContent = 'Escribe tu folio y tu clave.'; err.hidden = false; return; }
         busy(btn, true, 'Entrando…');
-        try { prov = await P.entrar(folio.value, clave.value); docs = await P.documentos(prov.id); errores = validar(prov.datos || {}); ir(inicial()); }
+        try { prov = await P.entrar(folio.value, clave.value); docs = await P.documentos(prov.id); errores = validar(prov.datos || {}, prov.tipo); ir(inicial()); }
         catch (e) { busy(btn, false); err.textContent = friendly(e).message; err.hidden = false; }
       });
       mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '12px' } }, directorio ? 'Entrar para actualizar' : 'Continuar mi registro'), form);
@@ -151,10 +153,10 @@ function asistente(paso) {
 }
 
 function lateral(paso) {
-  const idx = PASOS_UI.findIndex((p) => p.id === paso);
+  const idx = pasosUI().findIndex((p) => p.id === paso);
   const falt = prov ? new Set(P.pendientes(prov, docs).map((f) => f.paso)) : new Set();
   const nav = h('nav', { class: 'stepper', 'aria-label': 'Pasos del registro' });
-  PASOS_UI.forEach((p, i) => {
+  pasosUI().forEach((p, i) => {
     const cls = [i < idx && !falt.has(p.id) ? 'done' : '', i === idx ? 'current' : '', i < idx && falt.has(p.id) ? 'flag' : ''].join(' ').trim();
     nav.appendChild(h('button', { type: 'button', class: cls || null, disabled: !prov && i > 0, 'aria-current': i === idx ? 'step' : null,
       onclick: () => { if (p.id !== 'contacto' || !prov) ir(p.id); } },
@@ -173,9 +175,9 @@ function lateral(paso) {
 }
 
 function encabezado(id, titulo) {
-  const n = PASOS_UI.findIndex((x) => x.id === id) + 1;
+  const n = pasosUI().findIndex((x) => x.id === id) + 1;
   return h('div', { class: 'step-head' }, h('span', { class: 'step-ico' }, icon(TITULO_ICON[id] || 'doc')),
-    h('div', null, h('div', { class: 'step-kicker' }, 'Paso ' + n + ' de ' + PASOS_UI.length), h('h1', { id: 'paso-titulo' }, titulo)));
+    h('div', null, h('div', { class: 'step-kicker' }, 'Paso ' + n + ' de ' + pasosUI().length), h('h1', { id: 'paso-titulo' }, titulo)));
 }
 
 function valor(k) { return prov ? (prov.datos || {})[k] : borrador.datos[k]; }
@@ -317,13 +319,13 @@ async function guardar() {
   if (guard.vuelo) { guard.otra = true; return guard.vuelo; }
   guard.dirty = false;
   const enviados = { ...guard.cambiados };
-  const paso = PASOS_UI.some((p) => p.id === actual) ? actual : prov.paso;
+  const paso = pasosUI().some((p) => p.id === actual) ? actual : prov.paso;
   estadoGuardado('Guardando…');
   guard.vuelo = P.guardar(prov, prov.datos, paso).then((r) => {
     Object.keys(enviados).forEach((k) => { if (guard.cambiados[k] === enviados[k]) delete guard.cambiados[k]; });
     errores = r.errores;
     estadoGuardado('Guardado a las ' + hora(r.en));
-    PASOS.forEach((p) => pintarErrores(p.id));
+    pasosDe(prov.tipo).forEach((p) => pintarErrores(p.id));
   }).catch((e) => {
     guard.dirty = true;
     const err = friendly(e);
@@ -338,7 +340,7 @@ function pasoDatos(card, barra, pasoId) {
   const p = PASOS.find((x) => x.id === pasoId);
   card.append(encabezado(pasoId, p.titulo), h('p', { class: 'intro' }, p.intro),
     h('div', { class: 'grid-2' }, p.campos.map((c) => control(c, pasoId))));
-  const idx = PASOS_UI.findIndex((x) => x.id === pasoId);
+  const idx = pasosUI().findIndex((x) => x.id === pasoId);
   if (!prov) {
     // El aviso se muestra desde el primer dato; la aceptación (casilla) se pide al final, antes de enviar.
     const priv = (window.CP_CONFIG || {}).privacyUrl;
@@ -352,7 +354,7 @@ function pasoDatos(card, barra, pasoId) {
       busy(go, true, 'Generando folio…');
       try {
         const r = await P.iniciar(borrador.datos, directorio ? 'actual' : 'nuevo');
-        prov = r.prov; docs = []; errores = validar(prov.datos);
+        prov = r.prov; docs = []; errores = validar(prov.datos, prov.tipo);
         borrador = { datos: {} }; try { sessionStorage.removeItem(DRAFT); } catch (x) { /* nada */ }
         await credenciales(r.clave, true);
         ir('empresa');
@@ -379,9 +381,9 @@ function pasoDatos(card, barra, pasoId) {
       return;
     }
     if (prov.estado === 'aprobado') toast('Datos actualizados.', 'ok');
-    ir(['correccion', 'aprobado'].includes(prov.estado) ? 'estado' : PASOS_UI[idx + 1].id);
+    ir(['correccion', 'aprobado'].includes(prov.estado) ? 'estado' : pasosUI()[idx + 1].id);
   });
-  mount(barra, idx > 1 ? h('button', { type: 'button', class: 'btn', onclick: () => ir(PASOS_UI[idx - 1].id) }, 'Anterior') : null,
+  mount(barra, idx > 1 ? h('button', { type: 'button', class: 'btn', onclick: () => ir(pasosUI()[idx - 1].id) }, 'Anterior') : null,
     h('span', { class: 'spacer' }), h('span', { class: 'small muted' }, 'Se guarda automáticamente'), next);
 }
 
@@ -467,7 +469,7 @@ function pasoDocumentos(card, barra) {
     if (s) s.replaceWith(lateral('documentos'));
   };
   pintar();
-  mount(barra, h('button', { type: 'button', class: 'btn', onclick: () => ir('operacion') }, 'Anterior'), h('span', { class: 'spacer' }),
+  mount(barra, h('button', { type: 'button', class: 'btn', onclick: () => { const u = pasosUI(); ir(u[u.findIndex((x) => x.id === 'documentos') - 1].id); } }, 'Anterior'), h('span', { class: 'spacer' }),
     h('button', { type: 'button', class: 'btn btn-primary', onclick: () => ir('revision') }, 'Continuar'));
 }
 
@@ -489,7 +491,7 @@ function pasoEnvio(card, barra) {
     : h('div', { class: 'note note-ok' }, h('h3', null, 'Todo listo para enviar'), h('p', null, 'Al enviar recibirás una confirmación en ' + prov.correo + ' y el equipo de Logística recibirá una alerta para revisarlo.')));
   mount(card, encabezado('revision', 'Revisa y envía'),
     h('p', { class: 'intro' }, 'Confirma tu información. Después de enviar ya no podrás modificarla, salvo que te pidamos una corrección.'),
-    aviso, h('div', { class: 'stack', style: { marginTop: '18px' } }, PASOS.map((p) => resumen(p.id, true)),
+    aviso, h('div', { class: 'stack', style: { marginTop: '18px' } }, pasosDe(prov.tipo).map((p) => resumen(p.id, true)),
       h('section', { class: 'card card-pad' }, h('div', { class: 'row', style: { marginBottom: '12px' } }, h('h2', { style: { fontSize: '16px' } }, 'Documentos'),
         h('span', { class: 'spacer' }), h('button', { type: 'button', class: 'link', onclick: () => ir('documentos') }, 'Editar')),
         h('dl', { class: 'kv' }, entregados.map((t) => [h('dt', null, t.def.l), h('dd', null, t.actual.nombre)])))));
@@ -580,7 +582,7 @@ function estado() {
     h('div', { class: 'grid-2' },
       h('section', { class: 'card card-pad' }, h('h2', { style: { fontSize: '16px', marginBottom: '12px' } }, 'Documentos entregados'),
         h('dl', { class: 'kv' }, tabla.filter((t) => t.actual).map((t) => [h('dt', null, t.def.l), h('dd', null, t.actual.nombre, ' ', prov.estado !== 'enviado' ? tag(REVISION[t.actual.revision].tag, REVISION[t.actual.revision].l) : null)]))),
-      h('div', { class: 'stack' }, PASOS.map((p) => resumen(p.id, false))))));
+      h('div', { class: 'stack' }, pasosDe(prov.tipo).map((p) => resumen(p.id, false))))));
   enfocar(document.getElementById('st-t'));
 }
 

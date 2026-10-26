@@ -1,7 +1,7 @@
 /* Operaciones del proveedor sobre Firebase. La seguridad real la imponen las reglas de Firestore. */
-import { fb, auth, db, COL, ref, col, getOne, getAll, now, newId, randomChars, sha256, portalUrl, panelUrl, AppError } from './firebase.js?v=14';
-import { PASOS, CAMPOS, DOCS, ACCEPT, MAX_MB, ESTADOS, docLabel, requeridos, validar, normalizar } from './catalog.js?v=14';
-import { enviar as enviarCorreo, destinatarios } from './mail.js?v=14';
+import { fb, auth, db, COL, ref, col, getOne, getAll, now, newId, randomChars, sha256, portalUrl, panelUrl, AppError } from './firebase.js?v=15';
+import { PASOS, pasosDe, CAMPOS, DOCS, ACCEPT, MAX_MB, ESTADOS, docLabel, requeridos, validar, normalizar } from './catalog.js?v=15';
+import { enviar as enviarCorreo, destinatarios } from './mail.js?v=15';
 
 const CHUNK = 700000;
 const nuevaClaveTxt = () => { const c = randomChars(8, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'); return c.slice(0, 4) + '-' + c.slice(4); };
@@ -48,8 +48,8 @@ export function tablero(prov, docs) {
 
 export function pendientes(prov, docs) {
   const out = [];
-  const err = validar(prov.datos || {});
-  PASOS.forEach((p) => { const n = Object.keys(err[p.id] || {}).length; if (n) out.push({ paso: p.id, texto: 'Completa «' + p.titulo + '»: ' + n + (n === 1 ? ' dato pendiente.' : ' datos pendientes.') }); });
+  const err = validar(prov.datos || {}, prov.tipo);
+  pasosDe(prov.tipo).forEach((p) => { const n = Object.keys(err[p.id] || {}).length; if (n) out.push({ paso: p.id, texto: 'Completa «' + p.titulo + '»: ' + n + (n === 1 ? ' dato pendiente.' : ' datos pendientes.') }); });
   tablero(prov, docs).forEach((t) => {
     if (!t.requerido) return;
     if (!t.actual) out.push({ paso: 'documentos', texto: 'Falta subir: ' + t.def.l + '.' });
@@ -136,7 +136,7 @@ export async function guardar(prov, cambios, paso) {
   if (paso) patch.paso = paso;
   await fb.updateDoc(ref(COL.prov, prov.id), patch);
   Object.assign(prov, patch);
-  return { errores: validar(datos), requeridos: requeridos(datos), en: patch.actualizado_en };
+  return { errores: validar(datos, prov.tipo), requeridos: requeridos(datos), en: patch.actualizado_en };
 }
 
 function bytes(b64) { const s = atob(b64), o = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) o[i] = s.charCodeAt(i); return o; }

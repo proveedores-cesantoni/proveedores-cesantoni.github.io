@@ -1,10 +1,10 @@
 /* Panel del equipo de Logística. */
-import { start, configured, friendly, CFG } from '../core/firebase.js?v=14';
-import { PASOS, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=14';
-import * as E from '../core/equipo.js?v=14';
-import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=14';
-import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=14';
-import { portalUrl } from '../core/firebase.js?v=14';
+import { start, configured, friendly, CFG } from '../core/firebase.js?v=15';
+import { PASOS, pasosDe, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=15';
+import * as E from '../core/equipo.js?v=15';
+import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=15';
+import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=15';
+import { portalUrl } from '../core/firebase.js?v=15';
 
 const root = document.getElementById('app');
 let yo = null, cache = { provs: null, correos: null };
@@ -362,7 +362,7 @@ async function expediente(id) {
   const pintarCuerpo = () => {
     if (pestana === 'documentos') return pintarDocumentos();
     if (pestana === 'resolucion') return pintarResolucion();
-    if (pestana === 'datos') return mount(cuerpo, h('section', { class: 'card card-pad' }, h('div', { class: 'data-groups' }, PASOS.map((ps) =>
+    if (pestana === 'datos') return mount(cuerpo, h('section', { class: 'card card-pad' }, h('div', { class: 'data-groups' }, pasosDe(p.tipo).map((ps) =>
       h('div', null, h('h3', null, ps.titulo), bloquesDatos(ps, p.datos || {}).map((b) => [b.t ? h('h4', { class: 'kv-sec' }, icon(b.icon || 'doc'), b.t) : null,
         h('dl', { class: 'kv' }, b.items.map((c) => [h('dt', null, c.l), h('dd', { style: c.t === 'contactos' ? { whiteSpace: 'pre-line' } : null }, valorTxt(c, (p.datos || {})[c.k]))]))]))))));
     if (pestana === 'historial') return mount(cuerpo, h('section', { class: 'card card-pad' }, D.hist.length ? h('ul', { class: 'timeline' }, D.hist.map((x) =>

@@ -89,6 +89,8 @@ export const PASOS = [
     { k: 'man_horario', l: 'Disponibilidad', t: 'radio', req: true, op: ['24/7', 'Horario diurno', 'Por cita'], si: conManiobras },
     { k: 'man_ubicaciones', l: 'Dónde realizas maniobras', t: 'text', max: 300, wide: true, si: conManiobras, help: 'Tus instalaciones, las del cliente, puertos, etc.' }] }
 ];
+/* Los proveedores actuales (liga del directorio) no capturan su operación: solo contacto, empresa y documentos. */
+export const pasosDe = (tipo) => (tipo === 'actual' ? PASOS.filter((p) => p.id !== 'operacion') : PASOS);
 export const CAMPOS = Object.fromEntries(PASOS.flatMap((p) => p.campos.filter((c) => c.t !== 'sec').map((c) => [c.k, c])));
 /* ¿El campo aplica a este registro? Flota, forwarder, almacenes y maniobras dependen de los servicios elegidos. */
 export const visible = (c, d) => !c.si || c.si(d || {});
@@ -165,9 +167,9 @@ export function normalizar(campo, v) {
   return s;
 }
 
-export function validar(datos) {
+export function validar(datos, tipo) {
   const out = {};
-  PASOS.forEach((p) => {
+  pasosDe(tipo).forEach((p) => {
     const e = {};
     p.campos.forEach((c) => {
       if (!aplica(c, datos)) return;
