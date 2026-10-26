@@ -1,7 +1,7 @@
 /* Operaciones del proveedor sobre Firebase. La seguridad real la imponen las reglas de Firestore. */
-import { fb, auth, db, COL, ref, col, getOne, getAll, now, newId, randomChars, sha256, portalUrl, panelUrl, AppError } from './firebase.js?v=15';
-import { PASOS, pasosDe, CAMPOS, DOCS, ACCEPT, MAX_MB, ESTADOS, docLabel, requeridos, validar, normalizar } from './catalog.js?v=15';
-import { enviar as enviarCorreo, destinatarios } from './mail.js?v=15';
+import { fb, auth, db, COL, ref, col, getOne, getAll, now, newId, randomChars, sha256, portalUrl, panelUrl, AppError } from './firebase.js?v=16';
+import { PASOS, pasosDe, CAMPOS, DOCS, ACCEPT, MAX_MB, ESTADOS, docLabel, requeridos, validar, normalizar } from './catalog.js?v=16';
+import { enviar as enviarCorreo, destinatarios } from './mail.js?v=16';
 
 const CHUNK = 700000;
 const nuevaClaveTxt = () => { const c = randomChars(8, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'); return c.slice(0, 4) + '-' + c.slice(4); };
@@ -59,11 +59,11 @@ export function pendientes(prov, docs) {
 }
 
 export async function iniciar(entrada, tipo) {
-  const actual = tipo === 'actual';
   const datos = {};
   PASOS[0].campos.forEach((c) => { datos[c.k] = normalizar(c, entrada[c.k]); });
   const errores = validar(datos).contacto || {};
   if (Object.keys(errores).length) throw new AppError('Revisa los datos marcados.', 422, errores);
+  if (tipo === 'actual') return iniciarSinFolio(datos);
   const clave = nuevaClaveTxt();
   let cred;
   try { cred = await fb.createUserWithEmailAndPassword(auth, datos.correo, clave); }
@@ -73,7 +73,7 @@ export async function iniciar(entrada, tipo) {
   }
   const uid = cred.user.uid, t = now();
   let folio = '';
-  const prov = { folio, tipo: actual ? 'actual' : 'nuevo', estado: 'captura', datos, razon_social: datos.razon_social, pais: datos.pais, contacto: datos.contacto, correo: datos.correo,
+  const prov = { folio, tipo: 'nuevo', estado: 'captura', datos, razon_social: datos.razon_social, pais: datos.pais, contacto: datos.contacto, correo: datos.correo,
     telefono: datos.telefono, acceso_correo: datos.correo, paso: 'empresa', envios: 0, creado_en: t, actualizado_en: t, enviado_en: null, reenviado_en: null,
     resuelto_en: null, resultado: 'pendiente', responsable_id: null, responsable: '', notas: '', entregados: {}, revisiones: {} };
   try {
@@ -85,22 +85,46 @@ export async function iniciar(entrada, tipo) {
       if (cs.exists()) tx.update(cref, { n }); else tx.set(cref, { n });
       tx.set(ref(COL.folios, folio), { correo: datos.correo, uid, n });
       tx.set(ref(COL.prov, uid), prov);
-      tx.set(ref(COL.prov, uid, 'historial', newId()), { tipo: 'inicio', texto: 'Folio ' + folio + ' generado' + (actual ? ' desde la liga de proveedores actuales.' : '.'), actor: datos.correo, actor_tipo: 'proveedor', creado_en: t });
+      tx.set(ref(COL.prov, uid, 'historial', newId()), { tipo: 'inicio', texto: 'Folio ' + folio + ' generado.', actor: datos.correo, actor_tipo: 'proveedor', creado_en: t });
     });
   } catch (e) { await cred.user.delete().catch(() => null); throw e; }
   prov.id = uid;
   await enviarCorreo({ plantilla: 'proveedor', tipo: 'bienvenida', proveedorId: uid, folio, para: datos.correo, secreto: true,
-    asunto: 'Tu folio de registro ' + folio + ' · CESANTONI', titulo: actual ? 'Tu folio de proveedor' : 'Tu registro está en marcha',
-    parrafos: [actual ? 'Hola ' + datos.contacto + ', gracias por actualizar tus datos en el directorio de proveedores de CESANTONI. Con este folio y tu clave puedes continuar y, más adelante, actualizar tus contactos y documentos.'
-      : 'Hola ' + datos.contacto + ', ya tienes folio de proveedor. Con estos datos puedes continuar desde cualquier dispositivo; tu avance se guarda solo.'],
+    asunto: 'Tu folio de registro ' + folio + ' · CESANTONI', titulo: 'Tu registro está en marcha',
+    parrafos: ['Hola ' + datos.contacto + ', ya tienes folio de proveedor. Con estos datos puedes continuar desde cualquier dispositivo; tu avance se guarda solo.'],
     datos: [['Folio', folio], ['Clave de acceso', clave], ['Empresa', datos.razon_social]],
-    boton: { texto: 'Continuar mi registro', url: portalUrl() + (actual ? '?directorio' : '') }, nota: 'Si pierdes tu clave, en el portal elige «Olvidé mi clave».' });
-  await enviarCorreo({ plantilla: 'interno', tipo: 'inicio', proveedorId: uid, folio, para: await destinatarios('inicio'), etiqueta: actual ? 'PROVEEDOR ACTUAL' : 'NUEVO REGISTRO',
-    asunto: 'Alerta: ' + (actual ? 'proveedor actual inició su registro ' : 'nuevo registro iniciado ') + folio, titulo: datos.razon_social,
-    parrafos: [(actual ? 'Un proveedor con el que ya trabajamos generó su folio desde la liga del directorio.' : 'Un proveedor generó su folio.') + ' Recibirás otra alerta cuando envíe el expediente completo.'],
+    boton: { texto: 'Continuar mi registro', url: portalUrl() }, nota: 'Si pierdes tu clave, en el portal elige «Olvidé mi clave».' });
+  await enviarCorreo({ plantilla: 'interno', tipo: 'inicio', proveedorId: uid, folio, para: await destinatarios('inicio'), etiqueta: 'NUEVO REGISTRO',
+    asunto: 'Alerta: nuevo registro iniciado ' + folio, titulo: datos.razon_social,
+    parrafos: ['Un proveedor generó su folio. Recibirás otra alerta cuando envíe el expediente completo.'],
     datos: [['Contacto', datos.contacto], ['Correo', datos.correo], ['Teléfono', datos.telefono], ['País', datos.pais]],
     boton: { texto: 'Ver en el panel', url: panelUrl() } });
   return { prov, clave };
+}
+
+/* Liga del directorio: sin folio ni clave. La cuenta de acceso es interna (correo y contraseña aleatorios que nadie usa):
+   solo sirve para que este navegador guarde el avance y suba los documentos. El correo del proveedor queda libre. */
+async function iniciarSinFolio(datos) {
+  const az = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  const acceso = 'directorio-' + randomChars(20, az) + '@sin-folio.proveedores-cesantoni.github.io';
+  const cred = await fb.createUserWithEmailAndPassword(auth, acceso, randomChars(32, az + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'));
+  const uid = cred.user.uid, t = now();
+  const prov = { folio: '', tipo: 'actual', estado: 'captura', datos, razon_social: datos.razon_social, pais: datos.pais, contacto: datos.contacto, correo: datos.correo,
+    telefono: datos.telefono, acceso_correo: acceso, paso: 'empresa', envios: 0, creado_en: t, actualizado_en: t, enviado_en: null, reenviado_en: null,
+    resuelto_en: null, resultado: 'pendiente', responsable_id: null, responsable: '', notas: '', entregados: {}, revisiones: {} };
+  try {
+    const b = fb.writeBatch(db);
+    b.set(ref(COL.prov, uid), prov);
+    b.set(ref(COL.prov, uid, 'historial', newId()), { tipo: 'inicio', texto: 'Registro iniciado desde la liga del directorio (sin folio).', actor: datos.correo, actor_tipo: 'proveedor', creado_en: t });
+    await b.commit();
+  } catch (e) { await cred.user.delete().catch(() => null); throw e; }
+  prov.id = uid;
+  await enviarCorreo({ plantilla: 'interno', tipo: 'inicio', proveedorId: uid, para: await destinatarios('inicio'), etiqueta: 'PROVEEDOR ACTUAL',
+    asunto: 'Alerta: proveedor actual inició su registro en el directorio', titulo: datos.razon_social,
+    parrafos: ['Un proveedor con el que ya trabajamos empezó a llenar sus datos desde la liga del directorio. Recibirás otra alerta cuando lo envíe.'],
+    datos: [['Contacto', datos.contacto], ['Correo', datos.correo], ['Teléfono', datos.telefono], ['País', datos.pais]],
+    boton: { texto: 'Ver en el panel', url: panelUrl() } });
+  return { prov, clave: null };
 }
 
 export async function entrar(folio, clave) {
@@ -196,15 +220,15 @@ export async function enviar(prov) {
   const d = prov.datos || {};
   const lista = tablero(prov, docs).filter((x) => x.actual).map((x) => x.def.l + ' — ' + x.actual.nombre + ' (v' + x.actual.version + ')');
   await enviarCorreo({ plantilla: 'proveedor', tipo: eraCorreccion ? 'correcciones_recibidas' : 'recibido', proveedorId: prov.id, folio: prov.folio, para: prov.correo,
-    asunto: (eraCorreccion ? 'Recibimos tus correcciones ' : 'Recibimos tu registro ') + prov.folio,
+    asunto: (eraCorreccion ? 'Recibimos tus correcciones ' : 'Recibimos tu registro ') + (prov.folio || '· CESANTONI'),
     titulo: eraCorreccion ? 'Recibimos tus correcciones' : '¡Registro recibido!',
     parrafos: [eraCorreccion ? 'Tus documentos corregidos quedaron en revisión.' : 'Tu expediente llegó completo y quedó pendiente de revisión por el equipo de Logística de CESANTONI.',
       'Te avisaremos a este correo si necesitamos una corrección o cuando haya una resolución.'],
     datos: [['Empresa', prov.razon_social], ['Estado', ESTADOS.enviado.l], ['Documentos entregados', String(lista.length)]],
-    boton: { texto: 'Ver el estado de mi registro', url: portalUrl() } });
+    boton: prov.folio ? { texto: 'Ver el estado de mi registro', url: portalUrl() } : null });
   await enviarCorreo({ plantilla: 'interno', tipo: eraCorreccion ? 'correcciones' : 'completo', proveedorId: prov.id, folio: prov.folio,
     para: await destinatarios('envio'), etiqueta: eraCorreccion ? 'CORRECCIONES RECIBIDAS' : 'REGISTRO COMPLETO',
-    asunto: (eraCorreccion ? 'Alerta: correcciones reenviadas ' : 'Alerta: registro completo para revisar ') + prov.folio,
+    asunto: (eraCorreccion ? 'Alerta: correcciones reenviadas ' : 'Alerta: registro completo para revisar ') + (prov.folio || prov.razon_social),
     titulo: prov.razon_social,
     parrafos: [eraCorreccion ? 'El proveedor atendió las correcciones y reenvió su expediente.' : 'El proveedor llenó correctamente su registro y envió todos los documentos requeridos.'],
     datos: [['Contacto', prov.contacto], ['Correo', prov.correo], ['Teléfono', prov.telefono], ['País', prov.pais], ['RFC / ID fiscal', d.rfc || '—'],

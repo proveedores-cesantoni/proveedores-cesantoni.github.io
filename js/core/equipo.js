@@ -1,8 +1,8 @@
 /* Operaciones del equipo interno (panel). Las reglas de Firestore limitan todo al personal activo. */
-import { fb, auth, db, CFG, COL, ref, col, getOne, getAll, where, now, newId, emulate, portalUrl, panelUrl, AppError } from './firebase.js?v=15';
-import { DOCS, ESTADOS, REVISION, ALERTAS, docLabel, requeridos, emailOk } from './catalog.js?v=15';
-import { enviar as enviarCorreo, reintentar as reintentarCorreo } from './mail.js?v=15';
-import { diasDesde, diasHasta } from './ui.js?v=15';
+import { fb, auth, db, CFG, COL, ref, col, getOne, getAll, where, now, newId, emulate, portalUrl, panelUrl, AppError } from './firebase.js?v=16';
+import { DOCS, ESTADOS, REVISION, ALERTAS, docLabel, requeridos, emailOk } from './catalog.js?v=16';
+import { enviar as enviarCorreo, reintentar as reintentarCorreo } from './mail.js?v=16';
+import { diasDesde, diasHasta } from './ui.js?v=16';
 
 const claveOk = (p) => String(p).length >= 10 && /[A-Za-z]/.test(p) && /\d/.test(p);
 const CLAVE_MSG = 'La contraseña debe tener al menos 10 caracteres, con letras y números.';
@@ -123,9 +123,10 @@ async function avisarCorrecciones(p, docs) {
   p.estado = 'correccion';
   await enviarCorreo({ plantilla: 'proveedor', tipo: 'correccion', proveedorId: p.id, folio: p.folio, para: p.correo,
     asunto: 'Necesitamos una corrección en tu registro ' + p.folio, titulo: 'Necesitamos algunas correcciones',
-    parrafos: ['Revisamos tu expediente. Sustituye estos documentos desde el portal; los demás se conservan.'],
+    parrafos: [p.folio ? 'Revisamos tu expediente. Sustituye estos documentos desde el portal; los demás se conservan.'
+      : 'Revisamos tus documentos. Envía la versión corregida de estos a tu contacto de Logística de CESANTONI; los demás se conservan.'],
     datos: vig.map((d) => [docLabel(d.tipo), d.motivo + (d.notas ? ' — ' + d.notas : '')]),
-    boton: { texto: 'Atender correcciones', url: portalUrl() } });
+    boton: p.folio ? { texto: 'Atender correcciones', url: portalUrl() } : null });
   return vig.length;
 }
 
@@ -190,14 +191,14 @@ export async function resolver(p, docs, { resultado, notas, responsableId, equip
       asunto: (ok ? 'Tu registro fue aprobado ' : 'Resultado de tu registro ') + p.folio, titulo: ok ? '¡Bienvenido como proveedor!' : 'Tu registro no fue aprobado',
       parrafos: [ok ? 'Tu empresa quedó dada de alta como proveedor de transporte de CESANTONI. El equipo de Logística se pondrá en contacto contigo.'
         : 'Por ahora tu registro no fue aprobado. Si tienes dudas, comunícate con tu contacto de Logística de CESANTONI.'],
-      datos: [['Empresa', p.razon_social], ['Resultado', ok ? 'Aprobado' : 'No aprobado']], boton: { texto: 'Ver mi registro', url: portalUrl() } });
+      datos: [['Empresa', p.razon_social], ['Resultado', ok ? 'Aprobado' : 'No aprobado']], boton: p.folio ? { texto: 'Ver mi registro', url: portalUrl() } : null });
   }
   return p;
 }
 
 /* ------------------------------------------------------------ alertas del tablero */
 export function alertas(provs, correos) {
-  const por = (x) => ({ id: x.id, folio: x.folio, empresa: x.razon_social || 'Sin nombre' });
+  const por = (x) => ({ id: x.id, folio: x.folio || 'Sin folio', empresa: x.razon_social || 'Sin nombre' });
   const revisar = provs.filter((p) => p.estado === 'enviado').map((p) => ({ ...por(p), dias: diasDesde(p.reenviado_en || p.enviado_en) }))
     .sort((a, b) => b.dias - a.dias);
   const correccion = provs.filter((p) => p.estado === 'correccion' && diasDesde(p.actualizado_en) >= ALERTAS.correccionDias)
@@ -261,7 +262,7 @@ export async function borrarProveedor(p) {
   (await getAll(where(COL.correos, 'proveedor_id', p.id))).forEach((x) => refs.push(ref(COL.correos, x.id)));
   await borrarEnLotes(refs);
   // Al final el folio y el registro: si algo falla antes, el expediente sigue visible y se puede reintentar.
-  await borrarEnLotes([ref(COL.folios, p.folio), ref(COL.prov, p.id)]);
+  await borrarEnLotes([...(p.folio ? [ref(COL.folios, p.folio)] : []), ref(COL.prov, p.id)]);
 }
 export async function borrarCorreo(c) {
   if (c.estado === 'enviado') throw new AppError('Solo se pueden borrar correos que no se enviaron.', 409);

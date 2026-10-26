@@ -1,16 +1,17 @@
 /* Panel del equipo de Logística. */
-import { start, configured, friendly, CFG } from '../core/firebase.js?v=15';
-import { PASOS, pasosDe, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=15';
-import * as E from '../core/equipo.js?v=15';
-import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=15';
-import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=15';
-import { portalUrl } from '../core/firebase.js?v=15';
+import { start, configured, friendly, CFG } from '../core/firebase.js?v=16';
+import { PASOS, pasosDe, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=16';
+import * as E from '../core/equipo.js?v=16';
+import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=16';
+import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=16';
+import { portalUrl } from '../core/firebase.js?v=16';
 
 const root = document.getElementById('app');
 let yo = null, cache = { provs: null, correos: null };
 const esAdmin = () => yo && yo.rol === 'admin';
 const fail = (e) => toast(friendly(e).message, 'bad');
 const etiquetaEstado = (s) => tag((ESTADOS[s] || {}).tag || '', (ESTADOS[s] || { l: s }).l);
+const folioDe = (p) => p.folio || 'Sin folio';
 const etiquetaTipo = (p) => (p.tipo === 'actual' ? tag('accent', TIPOS_PROV.actual) : null);
 /* Liga que se comparte con los proveedores con los que ya se trabaja. */
 const ligaDirectorio = () => new URL('directorio/', portalUrl()).href;
@@ -247,7 +248,7 @@ async function listado(params) {
         h('tbody', null, vista.map((p) => {
           const rd = E.resumenDocs(p), d = p.datos || {};
           const tr = h('tr', { class: 'go', tabindex: '0' },
-            h('td', null, h('a', { class: 'folio', href: '#/proveedor/' + p.id }, p.folio)),
+            h('td', null, h('a', { class: 'folio', href: '#/proveedor/' + p.id }, folioDe(p))),
             h('td', null, h('strong', null, p.razon_social || '—'), h('div', { class: 'cell-sub' }, [d.nombre_comercial, d.rfc].filter(Boolean).join(' · '))),
             h('td', null, etiquetaEstado(p.estado), p.tipo === 'actual' ? h('div', { style: { marginTop: '4px' } }, etiquetaTipo(p)) : null),
             h('td', null, h('div', { class: 'meter', 'aria-hidden': 'true' }, rd.det.map((x) => h('i', { class: { falta: '', pendiente: 'up', aprobado: 'ok', correccion: 'bad', rechazado: 'bad' }[x.estado] || '', title: docLabel(x.k) }))),
@@ -307,24 +308,25 @@ function exportarCsv(provs) {
 
 /* Borrar un registro completo (solo administradores): pide escribir el folio para confirmar. */
 function botonBorrarProveedor(p, despues, conTexto) {
-  return h('button', { type: 'button', class: 'btn btn-bad' + (conTexto ? '' : ' btn-sm btn-icon'), title: 'Borrar proveedor', 'aria-label': 'Borrar proveedor ' + p.folio,
+  return h('button', { type: 'button', class: 'btn btn-bad' + (conTexto ? '' : ' btn-sm btn-icon'), title: 'Borrar proveedor', 'aria-label': 'Borrar proveedor ' + (p.folio || p.razon_social),
     onclick: (ev) => { ev.stopPropagation(); confirmarBorrado(p, despues); } }, icon('trash'), conTexto ? 'Borrar proveedor' : null);
 }
 function confirmarBorrado(p, despues) {
-  const inp = h('input', { class: 'input', id: 'del-folio', autocomplete: 'off', placeholder: p.folio });
+  const clave = p.folio || 'BORRAR';
+  const inp = h('input', { class: 'input', id: 'del-folio', autocomplete: 'off', placeholder: clave });
   const err = h('p', { class: 'err', hidden: true }, 'El folio no coincide.');
   const cancelar = h('button', { type: 'button', class: 'btn' }, 'Cancelar');
   const borrar = h('button', { type: 'button', class: 'btn btn-bad', id: 'del-ok' }, icon('trash'), 'Borrar definitivamente');
   const m = modal({ title: 'Borrar proveedor', body: [
     h('div', { class: 'note note-bad' }, h('h3', null, p.razon_social || p.folio),
-      h('p', null, 'Se borran para siempre su registro, documentos, historial y correos. El folio ' + p.folio + ' dejará de funcionar. No se puede deshacer.')),
+      h('p', null, 'Se borran para siempre su registro, documentos, historial y correos.' + (p.folio ? ' El folio ' + p.folio + ' dejará de funcionar.' : '') + ' No se puede deshacer.')),
     h('p', { class: 'small muted' }, 'Si necesitas conservarlo, descarga antes el respaldo en Sistema o el CSV.'),
-    field('Escribe el folio para confirmar', inp), err], actions: [cancelar, borrar] });
+    field(p.folio ? 'Escribe el folio para confirmar' : 'Escribe BORRAR para confirmar', inp), err], actions: [cancelar, borrar] });
   cancelar.addEventListener('click', m.close);
   borrar.addEventListener('click', async () => {
-    if (inp.value.trim().toUpperCase() !== p.folio) { err.hidden = false; inp.focus(); return; }
+    if (inp.value.trim().toUpperCase() !== clave) { err.hidden = false; inp.focus(); return; }
     busy(borrar, true, 'Borrando…');
-    try { await E.borrarProveedor(p); m.close(); toast('Proveedor ' + p.folio + ' borrado.', 'ok'); despues(); }
+    try { await E.borrarProveedor(p); m.close(); toast('Proveedor ' + (p.folio || p.razon_social) + ' borrado.', 'ok'); despues(); }
     catch (e) { busy(borrar, false); fail(e); }
   });
 }
@@ -342,7 +344,7 @@ async function expediente(id) {
   const pintarCab = () => {
     const rd = E.resumenDocs(p), dd = p.datos || {};
     mount(cab, h('div', { class: 'dossier-head' },
-      h('div', null, h('div', { class: 'folio' }, p.folio), h('div', { class: 'cell-sub' }, 'Actualizado ' + fechaHora(p.actualizado_en))),
+      h('div', null, h('div', { class: 'folio' }, folioDe(p)), h('div', { class: 'cell-sub' }, 'Actualizado ' + fechaHora(p.actualizado_en))),
       h('div', null, h('h1', { id: 'exp-t', tabindex: '-1' }, p.razon_social), h('div', { class: 'row', style: { marginTop: '8px' } }, etiquetaEstado(p.estado), etiquetaTipo(p),
         tag(rd.entregados === rd.req ? 'ok' : '', 'Documentos ' + rd.entregados + '/' + rd.req), rd.aprobados ? tag('ok', rd.aprobados + ' aprobados') : null,
         rd.correccion ? tag('warn', rd.correccion + ' en corrección') : null)),
@@ -513,7 +515,7 @@ async function vistaDirectorio() {
         h('tbody', null, r.map((p) => {
           const d = p.datos || {}, rd = E.resumenDocs(p), nuevos = p.estado === 'aprobado' ? E.porRevisar(p) : [];
           return h('tr', null,
-            h('td', null, h('a', { class: 'folio', href: '#/proveedor/' + p.id }, p.folio), h('div', null, h('strong', null, p.razon_social || '—')),
+            h('td', null, h('a', { class: 'folio', href: '#/proveedor/' + p.id }, folioDe(p)), h('div', null, h('strong', null, p.razon_social || '—')),
               h('div', { class: 'cell-sub' }, [d.nombre_comercial, d.rfc, [d.ciudad, d.estado].filter(Boolean).join(', ')].filter(Boolean).join(' · '))),
             h('td', null, etiquetaEstado(p.estado), p.tipo === 'actual' ? h('div', { style: { marginTop: '4px' } }, etiquetaTipo(p)) : null),
             h('td', null, h('ul', { class: 'dir-contactos' }, E.contactosDe(p).map(persona))),
@@ -532,7 +534,7 @@ async function vistaDirectorio() {
   mount(main, cabecera('Directorio', 'Proveedores con los que trabajamos y sus contactos', exportar),
     h('section', { class: 'card card-pad stack' },
       h('div', null, h('h2', { style: { fontSize: '16px', marginBottom: '4px' } }, 'Liga para proveedores actuales'),
-        h('p', { class: 'small muted', style: { margin: '0 0 10px' } }, 'Envíala a los proveedores con los que ya trabajas. Registran su empresa, contactos y documentos; aquí aparecen como «Proveedor actual». Ya aprobados, pueden volver con su folio y clave para actualizar contactos y documentos.'),
+        h('p', { class: 'small muted', style: { margin: '0 0 10px' } }, 'Envíala a los proveedores con los que ya trabajas. Registran su empresa, contactos y documentos sin folio ni clave; aquí aparecen como «Proveedor actual». Si después cambia algún dato, actualízalo con ellos directamente.'),
         h('div', { class: 'row' }, h('input', { class: 'input', id: 'dr-liga', readonly: true, value: liga, style: { flex: '1 1 320px', width: 'auto' }, onfocus: (ev) => ev.target.select() }), copiar)),
       h('div', { class: 'toolbar', style: { gridTemplateColumns: 'minmax(220px,2fr) 1fr 1fr' } }, field('Buscar', q), field('Área de contacto', area), field('Mostrar', est))),
     cont);
@@ -575,7 +577,7 @@ async function vistaCorreos() {
     if (!r.length) { mount(cont, h('div', { class: 'card empty' }, h('h2', null, 'Sin correos'), h('p', null, 'No hay correos con estos filtros.'))); return; }
     mount(cont, h('div', { class: 'table-wrap' }, h('table', { class: 'data' }, h('thead', null, h('tr', null, ['Fecha', 'Tarjeta', 'Folio', 'Para', 'Asunto', 'Estado', ''].map((x) => h('th', { scope: 'col' }, x)))),
       h('tbody', null, r.map((c) => h('tr', null, h('td', null, fechaHora(c.creado_en)), h('td', null, tag(c.plantilla === 'interno' ? 'violet' : 'accent', c.plantilla === 'interno' ? 'Alerta interna' : 'Proveedor'), h('div', { class: 'cell-sub' }, TIPOS[c.tipo] || c.tipo)),
-        h('td', null, c.proveedor_id ? h('a', { class: 'folio', href: '#/proveedor/' + c.proveedor_id }, c.folio) : '—'), h('td', null, c.para || '—'), h('td', null, c.asunto),
+        h('td', null, c.proveedor_id ? h('a', { class: 'folio', href: '#/proveedor/' + c.proveedor_id }, c.folio || 'Sin folio') : '—'), h('td', null, c.para || '—'), h('td', null, c.asunto),
         h('td', null, tag(c.estado === 'enviado' ? 'ok' : 'bad', c.estado === 'enviado' ? 'Enviado' : 'Error'),
           c.estado === 'enviado' && c.medio ? h('div', { class: 'cell-sub' }, c.medio === 'gmail' ? 'por Gmail' : 'por EmailJS') : null, c.error ? h('div', { class: 'cell-sub' }, c.error.slice(0, 90)) : null),
         h('td', { style: { whiteSpace: 'nowrap' } }, h('button', { type: 'button', class: 'btn btn-sm', onclick: () => previa(c) }, 'Ver'), ' ',

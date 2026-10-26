@@ -67,12 +67,14 @@ resolución, historial, correos con vista previa, destinatarios, usuarios, siste
 Liga para los proveedores con los que ya se trabaja: `https://proveedores-cesantoni.github.io/directorio/`
 (equivale a `https://proveedores-cesantoni.github.io/?directorio`; también se copia desde *Panel > Directorio*).
 
-- Registran solo contacto, datos de la empresa, contactos y documentos: **no capturan el paso «Operación»** (servicios, cobertura y flota).
+- **Sin folio ni clave**: llenan contacto, datos de la empresa, contactos y documentos una sola vez y lo envían. No consumen la numeración PROV-…
+  (por dentro se crea una cuenta de acceso aleatoria solo para guardar el avance en ese navegador).
+- **No capturan el paso «Operación»** (servicios, cobertura y flota).
   En el panel aparecen con la etiqueta «Proveedor actual». El alta nueva (liga principal) no cambia.
 - En *Empresa* pueden agregar **más contactos por área** (dirección, tráfico, monitoreo, facturación, cobranza…).
 - *Panel > Directorio* reúne a los proveedores actuales y a los aprobados con todas sus personas de contacto,
   con búsqueda, filtro por área y CSV de contactos (un renglón por persona).
-- Ya aprobado, el proveedor entra con su folio y clave para **actualizar datos, contactos y documentos** sin perder su estado.
+- Un proveedor aprobado **con folio** (alta normal) entra con su folio y clave para **actualizar datos, contactos y documentos** sin perder su estado.
   Cada documento nuevo queda «Por revisar», llega la alerta «Documento actualizado» a los destinatarios de «Registro completo»
   y aparece en *Tablero > Documentos actualizados por revisar*.
 - Requiere publicar la versión actual de `firestore.rules` (Firebase > Firestore Database > Reglas > Publicar).

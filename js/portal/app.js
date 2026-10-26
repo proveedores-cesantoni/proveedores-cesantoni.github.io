@@ -1,9 +1,9 @@
 /* Portal del proveedor. */
-import { start, configured, friendly, AppError } from '../core/firebase.js?v=15';
-import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=15';
-import * as P from '../core/proveedor.js?v=15';
-import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=15';
-import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=15';
+import { start, configured, friendly, AppError } from '../core/firebase.js?v=16';
+import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=16';
+import * as P from '../core/proveedor.js?v=16';
+import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=16';
+import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=16';
 
 const root = document.getElementById('app');
 /* Pasos según el tipo: el proveedor actual (liga del directorio) no captura «Operación». */
@@ -62,6 +62,8 @@ function ruta() {
 function barraSuperior() {
   const box = document.getElementById('top');
   if (!prov) { box.replaceChildren(); return; }
+  // Sin folio (liga del directorio) no hay con qué volver a entrar: no se ofrece «Salir».
+  if (!prov.folio) { mount(box, h('div', { class: 'who' }, h('span', { class: 'muted' }, 'Registro de'), h('strong', null, prov.razon_social))); return; }
   mount(box, h('div', { class: 'who' }, h('span', { class: 'muted' }, 'Folio'), h('strong', { class: 'folio' }, prov.folio)),
     h('button', { type: 'button', class: 'btn btn-sm', onclick: salir }, 'Salir'));
 }
@@ -77,12 +79,12 @@ function portada() {
       h('span', { class: 'eyebrow' }, directorio ? 'Directorio de proveedores · CESANTONI' : 'Red de transporte · CESANTONI'),
       h('h1', { class: 'hero-title' }, directorio ? 'Actualiza tus datos de proveedor' : 'Alta de proveedores de transporte'),
       h('p', { class: 'hero-lead' }, directorio
-        ? 'Si ya trabajas con CESANTONI, registra aquí los datos de tu empresa, tus contactos por área y tus documentos vigentes. Con tu folio y clave podrás actualizarlos cuando cambien.'
+        ? 'Si ya trabajas con CESANTONI, registra aquí los datos de tu empresa, tus contactos por área y tus documentos vigentes. No necesitas folio ni clave: lo llenas una vez y lo envías.'
         : 'Registra tu empresa, sube tus documentos y sigue tu revisión en línea. Tu avance se guarda solo: puedes pausar y continuar cuando quieras.'),
       h('div', { class: 'steps-mini' },
         h('div', null, h('b', null, '01'), h('span', null, directorio ? 'Datos y contactos' : 'Datos de tu empresa')),
         h('div', null, h('b', null, '02'), h('span', null, directorio ? 'Documentos vigentes' : 'Documentos en PDF o foto')),
-        h('div', null, h('b', null, '03'), h('span', null, directorio ? 'Validación y actualizaciones' : 'Revisión y alta'))),
+        h('div', null, h('b', null, '03'), h('span', null, directorio ? 'Envío al directorio' : 'Revisión y alta'))),
       h('div', { class: 'card card-pad' }, h('h2', { style: { fontSize: '16px', marginBottom: '12px' } }, 'Documentos que te pediremos'),
         h('ul', { class: 'doclist' }, req),
         h('p', { class: 'small muted', style: { margin: '12px 0 0' } }, 'PDF, JPG, PNG o WEBP de hasta ' + MAX_MB + ' MB. Operación nacional y cobertura en Centroamérica: ' + CENTROAMERICA.join(', ') + '.'))),
@@ -92,16 +94,22 @@ function portada() {
 
 function accesos() {
   const card = h('div', { class: 'card card-pad' });
-  const tabs = [['nuevo', directorio ? 'Primera vez' : 'Nuevo registro'], ['continuar', directorio ? 'Ya tengo folio' : 'Continuar'], ['olvide', 'Olvidé mi clave']];
+  if (directorio) {
+    card.append(h('h2', { style: { fontSize: '22px', marginBottom: '8px' } }, 'Registra a tu empresa'),
+      h('p', { class: 'muted' }, 'Toma unos minutos. Tu avance se guarda en este navegador hasta que lo envíes.'),
+      h('button', { type: 'button', class: 'btn btn-primary btn-block', onclick: () => ir('contacto') }, 'Registrar mi empresa'));
+    return card;
+  }
+  const tabs = [['nuevo', 'Nuevo registro'], ['continuar', 'Continuar'], ['olvide', 'Olvidé mi clave']];
   let activa = 'nuevo';
   const barra = h('div', { class: 'tabs', role: 'tablist' });
   const cuerpo = h('div');
   function pintar() {
     mount(barra, tabs.map(([k, l]) => h('button', { type: 'button', role: 'tab', 'aria-selected': String(k === activa), onclick: () => { activa = k; pintar(); } }, l)));
     if (activa === 'nuevo') {
-      mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '8px' } }, directorio ? 'Registra a tu empresa' : 'Empieza tu registro'),
+      mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '8px' } }, 'Empieza tu registro'),
         h('p', { class: 'muted' }, 'Primero tus datos de contacto. Al terminar ese paso recibes tu folio y una clave para continuar desde cualquier dispositivo.'),
-        h('button', { type: 'button', class: 'btn btn-primary btn-block', onclick: () => ir('contacto') }, directorio ? 'Registrar mi empresa' : 'Iniciar registro'));
+        h('button', { type: 'button', class: 'btn btn-primary btn-block', onclick: () => ir('contacto') }, 'Iniciar registro'));
     } else if (activa === 'continuar') {
       const folio = h('input', { class: 'input', id: 'c-folio', autocomplete: 'off', autocapitalize: 'characters', placeholder: 'PROV-0001' });
       const clave = h('input', { class: 'input', id: 'c-clave', autocomplete: 'off', placeholder: 'XXXX-XXXX' });
@@ -115,7 +123,7 @@ function accesos() {
         try { prov = await P.entrar(folio.value, clave.value); docs = await P.documentos(prov.id); errores = validar(prov.datos || {}, prov.tipo); ir(inicial()); }
         catch (e) { busy(btn, false); err.textContent = friendly(e).message; err.hidden = false; }
       });
-      mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '12px' } }, directorio ? 'Entrar para actualizar' : 'Continuar mi registro'), form);
+      mount(cuerpo, h('h2', { style: { fontSize: '22px', marginBottom: '12px' } }, 'Continuar mi registro'), form);
     } else {
       const folio = h('input', { class: 'input', id: 'o-folio', autocomplete: 'off', placeholder: 'PROV-0001' });
       const correo = h('input', { class: 'input', id: 'o-correo', type: 'email', autocomplete: 'email', placeholder: 'nombre@empresa.com' });
@@ -169,7 +177,8 @@ function lateral(paso) {
       if (!confirm('Tu clave actual dejará de funcionar. ¿Generar una nueva?')) return;
       try { await credenciales(await P.nuevaClave(prov), false); } catch (e) { toast(friendly(e).message, 'bad'); }
     });
-    nav.appendChild(h('div', { class: 'folio-box' }, h('div', { class: 'k' }, icon('flag'), 'Tu folio'), h('div', { class: 'v' }, prov.folio), guard.el, nueva));
+    nav.appendChild(prov.folio ? h('div', { class: 'folio-box' }, h('div', { class: 'k' }, icon('flag'), 'Tu folio'), h('div', { class: 'v' }, prov.folio), guard.el, nueva)
+      : h('div', { class: 'folio-box' }, h('div', { class: 'k' }, icon('flag'), 'Directorio'), h('p', { class: 'small', style: { margin: '6px 0' } }, 'Tu avance se guarda en este navegador. Termina y envía tu registro.'), guard.el));
   }
   return nav;
 }
@@ -338,7 +347,7 @@ async function guardar() {
 
 function pasoDatos(card, barra, pasoId) {
   const p = PASOS.find((x) => x.id === pasoId);
-  card.append(encabezado(pasoId, p.titulo), h('p', { class: 'intro' }, p.intro),
+  card.append(encabezado(pasoId, p.titulo), h('p', { class: 'intro' }, directorio && pasoId === 'contacto' && !prov ? 'Datos de la persona que registra a la empresa.' : p.intro),
     h('div', { class: 'grid-2' }, p.campos.map((c) => control(c, pasoId))));
   const idx = pasosUI().findIndex((x) => x.id === pasoId);
   if (!prov) {
@@ -346,17 +355,17 @@ function pasoDatos(card, barra, pasoId) {
     const priv = (window.CP_CONFIG || {}).privacyUrl;
     if (priv) card.append(h('p', { class: 'small muted', style: { marginTop: '22px' } }, 'Tus datos se tratan conforme a nuestro ',
       h('a', { href: priv, target: '_blank', rel: 'noopener' }, 'aviso de privacidad'), '. Te pediremos aceptarlo al final, antes de enviar tu registro.'));
-    const go = h('button', { type: 'button', class: 'btn btn-primary' }, 'Generar mi folio');
+    const go = h('button', { type: 'button', class: 'btn btn-primary' }, directorio ? 'Continuar' : 'Generar mi folio');
     go.addEventListener('click', async () => {
       const e = validar(borrador.datos).contacto || {};
       borrador.errores = e; mostrarTodo.contacto = true; pintarErrores('contacto');
       if (Object.keys(e).length) { const f = root.querySelector('.field.invalid input, .field.invalid select'); if (f) f.focus(); return; }
-      busy(go, true, 'Generando folio…');
+      busy(go, true, directorio ? 'Guardando…' : 'Generando folio…');
       try {
         const r = await P.iniciar(borrador.datos, directorio ? 'actual' : 'nuevo');
         prov = r.prov; docs = []; errores = validar(prov.datos, prov.tipo);
         borrador = { datos: {} }; try { sessionStorage.removeItem(DRAFT); } catch (x) { /* nada */ }
-        await credenciales(r.clave, true);
+        if (r.clave) await credenciales(r.clave, true);
         ir('empresa');
       } catch (err) {
         busy(go, false);
@@ -570,11 +579,12 @@ function estado() {
   } else if (prov.estado === 'rechazado') {
     alertasEl.push(tarjetaAlerta('bad', 'alert', 'Tu registro no fue aprobado', 'Si tienes dudas sobre la resolución, comunícate con tu contacto de Logística de CESANTONI.'));
   } else {
-    alertasEl.push(tarjetaAlerta('violet', 'clock', 'Tu expediente está en revisión', 'Te avisaremos a ' + prov.correo + ' si necesitamos una corrección o cuando haya una resolución.'));
+    alertasEl.push(prov.folio ? tarjetaAlerta('violet', 'clock', 'Tu expediente está en revisión', 'Te avisaremos a ' + prov.correo + ' si necesitamos una corrección o cuando haya una resolución.')
+      : tarjetaAlerta('ok', 'check', '¡Gracias! Tus datos quedaron en el directorio', 'El equipo de Logística de CESANTONI revisará tus documentos y te escribirá a ' + prov.correo + ' si necesita algo.'));
   }
   mount(root, h('div', { class: 'page' },
     h('section', { class: 'status-hero', 'aria-labelledby': 'st-t' },
-      h('div', null, h('div', { class: 'small', style: { color: '#A9B4C4', fontWeight: 700, letterSpacing: '1px' } }, 'FOLIO'), h('div', { class: 'fol' }, prov.folio)),
+      h('div', null, h('div', { class: 'small', style: { color: '#A9B4C4', fontWeight: 700, letterSpacing: '1px' } }, prov.folio ? 'FOLIO' : 'DIRECTORIO'), h('div', { class: 'fol' }, prov.folio || '✓')),
       h('div', null, tag(E.tag || '', E.l), h('h1', { id: 'st-t' }, prov.razon_social),
         h('p', null, 'Enviado el ' + fechaHora(prov.enviado_en) + (prov.envios > 1 ? ' · último envío ' + fechaHora(prov.reenviado_en) : '')),
         h('div', { class: 'track' }, pasos.map(([l, on]) => h('div', { class: on.includes(prov.estado) ? 'on' : null }, l))))),
