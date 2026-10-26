@@ -1,9 +1,9 @@
 /* Portal del proveedor. */
-import { start, configured, friendly, AppError } from '../core/firebase.js?v=17';
-import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=17';
-import * as P from '../core/proveedor.js?v=17';
-import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=17';
-import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=17';
+import { start, configured, friendly, AppError } from '../core/firebase.js?v=18';
+import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=18';
+import * as P from '../core/proveedor.js?v=18';
+import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=18';
+import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=18';
 
 const root = document.getElementById('app');
 /* Pasos según el tipo: el proveedor actual (liga del directorio) no captura «Operación». */
@@ -62,11 +62,11 @@ function ruta() {
 function barraSuperior() {
   const box = document.getElementById('top');
   if (!prov) { box.replaceChildren(); return; }
-  // Sin folio (liga del directorio) no hay con qué volver a entrar: en lugar de «Salir» se ofrece empezar otro registro.
+  // Sin folio (liga del directorio) no hay con qué volver a entrar: «Regresar» deja el registro y vuelve a la portada.
   if (!prov.folio) {
-    const otra = h('button', { type: 'button', class: 'btn btn-sm' }, 'Registrar otra empresa');
+    const otra = h('button', { type: 'button', class: 'btn btn-sm' }, 'Regresar');
     otra.addEventListener('click', () => {
-      if (prov.estado === 'captura' && !confirm('Este registro aún no se envía. Si empiezas otro, ya no podrás regresar a él. ¿Continuar?')) return;
+      if (prov.estado === 'captura' && !confirm('Este registro aún no se envía. Si regresas, ya no podrás volver a él. ¿Regresar?')) return;
       salir();
     });
     mount(box, h('div', { class: 'who' }, h('span', { class: 'muted' }, 'Registro de'), h('strong', null, prov.razon_social)), otra);
