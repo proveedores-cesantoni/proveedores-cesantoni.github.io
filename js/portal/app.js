@@ -1,9 +1,9 @@
 /* Portal del proveedor. */
-import { start, configured, friendly, AppError } from '../core/firebase.js?v=16';
-import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=16';
-import * as P from '../core/proveedor.js?v=16';
-import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=16';
-import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=16';
+import { start, configured, friendly, AppError } from '../core/firebase.js?v=17';
+import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=17';
+import * as P from '../core/proveedor.js?v=17';
+import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=17';
+import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=17';
 
 const root = document.getElementById('app');
 /* Pasos según el tipo: el proveedor actual (liga del directorio) no captura «Operación». */
@@ -62,8 +62,16 @@ function ruta() {
 function barraSuperior() {
   const box = document.getElementById('top');
   if (!prov) { box.replaceChildren(); return; }
-  // Sin folio (liga del directorio) no hay con qué volver a entrar: no se ofrece «Salir».
-  if (!prov.folio) { mount(box, h('div', { class: 'who' }, h('span', { class: 'muted' }, 'Registro de'), h('strong', null, prov.razon_social))); return; }
+  // Sin folio (liga del directorio) no hay con qué volver a entrar: en lugar de «Salir» se ofrece empezar otro registro.
+  if (!prov.folio) {
+    const otra = h('button', { type: 'button', class: 'btn btn-sm' }, 'Registrar otra empresa');
+    otra.addEventListener('click', () => {
+      if (prov.estado === 'captura' && !confirm('Este registro aún no se envía. Si empiezas otro, ya no podrás regresar a él. ¿Continuar?')) return;
+      salir();
+    });
+    mount(box, h('div', { class: 'who' }, h('span', { class: 'muted' }, 'Registro de'), h('strong', null, prov.razon_social)), otra);
+    return;
+  }
   mount(box, h('div', { class: 'who' }, h('span', { class: 'muted' }, 'Folio'), h('strong', { class: 'folio' }, prov.folio)),
     h('button', { type: 'button', class: 'btn btn-sm', onclick: salir }, 'Salir'));
 }

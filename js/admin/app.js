@@ -1,10 +1,10 @@
 /* Panel del equipo de Logística. */
-import { start, configured, friendly, CFG } from '../core/firebase.js?v=16';
-import { PASOS, pasosDe, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=16';
-import * as E from '../core/equipo.js?v=16';
-import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=16';
-import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=16';
-import { portalUrl } from '../core/firebase.js?v=16';
+import { start, configured, friendly, CFG } from '../core/firebase.js?v=17';
+import { PASOS, pasosDe, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=17';
+import * as E from '../core/equipo.js?v=17';
+import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=17';
+import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=17';
+import { portalUrl } from '../core/firebase.js?v=17';
 
 const root = document.getElementById('app');
 let yo = null, cache = { provs: null, correos: null };
