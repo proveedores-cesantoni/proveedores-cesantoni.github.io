@@ -234,6 +234,14 @@ dialog.modal::backdrop { background: rgba(15, 18, 24, .55); }
 .hero-lead { font-size: 17px; color: var(--ink-2); max-width: 60ch; }
 .steps-mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 26px 0; }
 .steps-mini div { padding: 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+.condiciones { margin: 0 0 22px; border-left: 4px solid var(--accent); }
+.condiciones h2 { font-size: 18px; margin: 0 0 4px; }
+.condiciones ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.condiciones li { display: flex; gap: 14px; align-items: flex-start; }
+.condiciones .ico { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-50); color: var(--accent); }
+.condiciones .ico svg { width: 21px; height: 21px; }
+.condiciones li b { display: block; font-size: 15px; color: var(--ink); }
+.condiciones li span { font-size: 13.5px; color: var(--muted); line-height: 1.45; }
 .steps-mini b { display: block; font-family: var(--display); font-size: 26px; color: var(--accent); line-height: 1; margin-bottom: 6px; }
 .steps-mini span { font-size: 13px; font-weight: 600; }
 .doclist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }

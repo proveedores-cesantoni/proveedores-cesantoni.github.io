@@ -1,9 +1,9 @@
 /* Portal del proveedor. */
-import { start, configured, friendly, AppError } from '../core/firebase.js?v=18';
-import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=18';
-import * as P from '../core/proveedor.js?v=18';
-import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=18';
-import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=18';
+import { start, configured, friendly, AppError } from '../core/firebase.js?v=19';
+import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=19';
+import * as P from '../core/proveedor.js?v=19';
+import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=19';
+import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=19';
 
 const root = document.getElementById('app');
 /* Pasos según el tipo: el proveedor actual (liga del directorio) no captura «Operación». */
@@ -93,11 +93,25 @@ function portada() {
         h('div', null, h('b', null, '01'), h('span', null, directorio ? 'Datos y contactos' : 'Datos de tu empresa')),
         h('div', null, h('b', null, '02'), h('span', null, directorio ? 'Documentos vigentes' : 'Documentos en PDF o foto')),
         h('div', null, h('b', null, '03'), h('span', null, directorio ? 'Envío al directorio' : 'Revisión y alta'))),
+      condiciones(),
       h('div', { class: 'card card-pad' }, h('h2', { style: { fontSize: '16px', marginBottom: '12px' } }, 'Documentos que te pediremos'),
         h('ul', { class: 'doclist' }, req),
         h('p', { class: 'small muted', style: { margin: '12px 0 0' } }, 'PDF, JPG, PNG o WEBP de hasta ' + MAX_MB + ' MB. Operación nacional y cobertura en Centroamérica: ' + CENTROAMERICA.join(', ') + '.'))),
     h('aside', { class: 'access' }, accesos())));
   enfocar();
+}
+
+/* Condiciones operativas para trabajar con CESANTONI (se muestran al inicio, en el alta y en el directorio). */
+const CONDICIONES = [
+  ['cal', 'Crédito a 90 días', 'El pago de los servicios se realiza con crédito a 90 días.'],
+  ['alert', 'Tarifas no negociables', 'Las tarifas establecidas por CESANTONI no están sujetas a negociación.'],
+  ['sat', 'Cuenta espejo obligatoria en cada viaje', 'En todos los viajes se comparte con CESANTONI la cuenta espejo del GPS de la unidad.']
+];
+function condiciones() {
+  return h('section', { class: 'card card-pad condiciones', 'aria-labelledby': 'cond-t' },
+    h('h2', { id: 'cond-t' }, 'Condiciones operativas'),
+    h('p', { class: 'small muted', style: { margin: '0 0 14px' } }, 'Antes de registrarte, toma en cuenta las condiciones para trabajar con CESANTONI:'),
+    h('ul', null, CONDICIONES.map(([ic, t, d]) => h('li', null, h('span', { class: 'ico' }, icon(ic)), h('div', null, h('b', null, t), h('span', null, d))))));
 }
 
 function accesos() {
