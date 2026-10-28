@@ -1,9 +1,9 @@
 /* Portal del proveedor. */
-import { start, configured, friendly, AppError } from '../core/firebase.js?v=19';
-import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=19';
-import * as P from '../core/proveedor.js?v=19';
-import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=19';
-import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=19';
+import { start, configured, friendly, AppError } from '../core/firebase.js?v=20';
+import { PASOS, pasosDe, DOCS, ACCEPT, ACCEPT_ATTR, MAX_MB, ESTADOS, REVISION, CENTROAMERICA, TODA, AREAS, requeridos, validar, visible, aplica, valorTxt } from '../core/catalog.js?v=20';
+import * as P from '../core/proveedor.js?v=20';
+import { h, mount, icon, logos, tag, toast, busy, modal, fecha, fechaHora, hora, tamano, plural, debounce, copy, fileToB64, comprimirImagen, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=20';
+import { fb, auth, db, COL, ref, col, getAll } from '../core/firebase.js?v=20';
 
 const root = document.getElementById('app');
 /* Pasos según el tipo: el proveedor actual (liga del directorio) no captura «Operación». */

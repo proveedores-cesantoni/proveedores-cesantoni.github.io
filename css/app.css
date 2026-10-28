@@ -465,3 +465,6 @@ table.data tr.go:hover td { background: #FAFBFC; }
 @media print { .brandbar, .side, .actionbar, #toasts { display: none !important; } body { background: #fff; } }
 .consent-box { border-left: 4px solid var(--accent); }
 .consent-box.invalid { border-color: var(--bad); background: var(--bad-50); }
+
+.dir-quitar { width: 26px; min-height: 26px; margin-left: 6px; vertical-align: middle; }
+.dir-quitar svg { width: 13px; height: 13px; }

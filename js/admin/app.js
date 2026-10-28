@@ -1,10 +1,10 @@
 /* Panel del equipo de Logística. */
-import { start, configured, friendly, CFG } from '../core/firebase.js?v=19';
-import { PASOS, pasosDe, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=19';
-import * as E from '../core/equipo.js?v=19';
-import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=19';
-import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=19';
-import { portalUrl } from '../core/firebase.js?v=19';
+import { start, configured, friendly, CFG } from '../core/firebase.js?v=20';
+import { PASOS, pasosDe, DOCS, ESTADOS, REVISION, MOTIVOS, PAISES, CENTROAMERICA, SERVICIOS, ALERTAS, ACCEPT, TODA, AREAS, TIPOS_PROV, docLabel, requeridos, visible, aplica, valorTxt } from '../core/catalog.js?v=20';
+import * as E from '../core/equipo.js?v=20';
+import { TIPOS, vistaPrevia, mailConfigured } from '../core/mail.js?v=20';
+import { h, mount, icon, logos, tag, toast, busy, modal, field, select, fecha, fechaHora, dia, diasDesde, tamano, lista, plural, debounce, copy, b64ToBlob, saveBlob, fatal } from '../core/ui.js?v=20';
+import { portalUrl } from '../core/firebase.js?v=20';
 
 const root = document.getElementById('app');
 let yo = null, cache = { provs: null, correos: null };
@@ -244,7 +244,7 @@ async function listado(params) {
     if (!r.length) { mount(cont, h('div', { class: 'card empty' }, h('h2', null, provs.length ? 'Sin resultados' : 'Aún no hay registros'), h('p', null, provs.length ? 'Ajusta los filtros.' : 'Aparecerán aquí en cuanto un proveedor genere su folio.'))); return; }
     mount(cont, h('p', { class: 'small muted', role: 'status', id: 'conteo' }, plural(r.length, 'registro', 'registros')),
       h('div', { class: 'table-wrap' }, h('table', { class: 'data' },
-        h('thead', null, h('tr', null, ['Folio', 'Empresa', 'Estado', 'Documentos', 'Contacto', 'Cobertura', 'Responsable', 'Actualizado', ...(esAdmin() ? [''] : [])].map((t) => h('th', { scope: 'col' }, t)))),
+        h('thead', null, h('tr', null, ['Folio', 'Empresa', 'Estado', 'Documentos', 'Contacto', 'Destinos', 'Responsable', 'Actualizado', ...(esAdmin() ? [''] : [])].map((t) => h('th', { scope: 'col' }, t)))),
         h('tbody', null, vista.map((p) => {
           const rd = E.resumenDocs(p), d = p.datos || {};
           const tr = h('tr', { class: 'go', tabindex: '0' },
@@ -274,7 +274,7 @@ async function listado(params) {
   const exportar = h('button', { type: 'button', class: 'btn btn-dark' }, 'Exportar CSV');
   exportar.addEventListener('click', () => exportarCsv(filtrar().r));
   mount(main, cabecera('Proveedores', 'Busca, filtra y abre cada expediente', exportar),
-    h('section', { class: 'card card-pad stack' }, h('div', { class: 'toolbar' }, field('Buscar', q), field('País', pais), field('Cobertura', cob), field('Servicio', serv), field('Ordenar', orden)),
+    h('section', { class: 'card card-pad stack' }, h('div', { class: 'toolbar' }, field('Buscar', q), field('País', pais), field('Destinos', cob), field('Servicio', serv), field('Ordenar', orden)),
       h('div', { class: 'row' }, field('Tipo de proveedor', tipo), field('Registrado desde', desde), field('Hasta', hasta), h('span', { class: 'spacer' }), limpiar), seg), cont);
   pintar();
 }
@@ -292,7 +292,7 @@ const EXTRA_CSV = PASOS.find((x) => x.id === 'operacion').campos.filter((c) => c
 
 function exportarCsv(provs) {
   const cols = ['Folio', 'Tipo', 'Estado', 'Resultado', 'Razón social', 'Nombre comercial', 'RFC', 'País', 'Contacto', 'Puesto', 'Correo', 'Teléfono', 'Domicilio', 'Ciudad', 'Estado (domicilio)', 'CP',
-    'Servicios', 'Cobertura nacional', 'Centroamérica', 'Tipos de unidad', 'Número de unidades', 'Monitoreo', 'GPS', 'Documentos entregados', 'Documentos aprobados', 'Responsable',
+    'Servicios', 'Destinos (disponibilidad y regreso)', 'Centroamérica', 'Tipos de unidad', 'Número de unidades', 'Monitoreo', 'GPS', 'Documentos entregados', 'Documentos aprobados', 'Responsable',
     'Notas internas', 'Inicio', 'Envío', 'Actualización', 'Más contactos', ...EXTRA_CSV.map((c) => (c.k.startsWith('fw_') ? 'Forwarder: ' : c.k.startsWith('alm_') ? 'Almacenes: ' : 'Maniobras: ') + c.l)];
   const cel = (v) => { let s = String(v === null || v === undefined ? '' : v); if (/^[=+\-@]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; };
   const filas = provs.map((p) => { const d = p.datos || {}, r = E.resumenDocs(p);
@@ -500,8 +500,18 @@ async function vistaDirectorio() {
       return true;
     });
   };
-  const persona = (c) => h('li', null, h('div', null, h('strong', null, c.nombre || '—'), ' ', tag('', c.area)),
-    h('div', { class: 'cell-sub' }, [c.puesto, c.telefono, c.correo].filter(Boolean).join(' · ') || 'Sin teléfono ni correo'));
+  /* Los contactos adicionales (d.contactos) se pueden quitar; el principal y el de operaciones son datos obligatorios del registro. */
+  const persona = (p) => (c, i) => {
+    const extra = i - (E.contactosDe(p).length - ((p.datos || {}).contactos || []).length);
+    return h('li', null, h('div', null, h('strong', null, c.nombre || '—'), ' ', tag('', c.area),
+      esAdmin() && extra >= 0 ? h('button', { type: 'button', class: 'btn btn-sm btn-bad btn-icon dir-quitar', title: 'Quitar contacto', 'aria-label': 'Quitar contacto ' + (c.nombre || c.area),
+        onclick: async (ev) => {
+          if (!confirm('¿Quitar a ' + (c.nombre || 'este contacto') + ' (' + c.area + ') de ' + (p.razon_social || 'este proveedor') + '?')) return;
+          busy(ev.currentTarget, true, '…');
+          try { await E.quitarContacto(p, extra); toast('Contacto quitado.', 'ok'); vistaDirectorio(); } catch (e) { busy(ev.currentTarget, false); fail(e); }
+        } }, icon('x')) : null),
+      h('div', { class: 'cell-sub' }, [c.puesto, c.telefono, c.correo].filter(Boolean).join(' · ') || 'Sin teléfono ni correo'));
+  };
   const pintar = () => {
     const r = filtrar();
     if (!r.length) {
@@ -518,11 +528,11 @@ async function vistaDirectorio() {
             h('td', null, h('a', { class: 'folio', href: '#/proveedor/' + p.id }, folioDe(p)), h('div', null, h('strong', null, p.razon_social || '—')),
               h('div', { class: 'cell-sub' }, [d.nombre_comercial, d.rfc, [d.ciudad, d.estado].filter(Boolean).join(', ')].filter(Boolean).join(' · '))),
             h('td', null, etiquetaEstado(p.estado), p.tipo === 'actual' ? h('div', { style: { marginTop: '4px' } }, etiquetaTipo(p)) : null),
-            h('td', null, h('ul', { class: 'dir-contactos' }, E.contactosDe(p).map(persona))),
+            h('td', null, h('ul', { class: 'dir-contactos' }, E.contactosDe(p).map(persona(p)))),
             h('td', null, lista(d.servicios), (d.unidades || []).length ? h('div', { class: 'cell-sub' }, (d.num_unidades ? d.num_unidades + ' unidades · ' : '') + d.unidades.join(', ')) : null),
             h('td', null, h('div', null, rd.aprobados + ' de ' + rd.req + ' aprobados'),
               nuevos.length ? h('div', { style: { marginTop: '4px' } }, tag('violet', plural(nuevos.length, 'nuevo por revisar', 'nuevos por revisar'))) : null),
-            h('td', null, fecha(p.actualizado_en)));
+            h('td', null, fecha(p.actualizado_en), esAdmin() ? h('div', { style: { marginTop: '10px' } }, botonBorrarProveedor(p, () => vistaDirectorio())) : null));
         })))));
   };
   q.addEventListener('input', debounce(() => { f.q = q.value.trim(); pintar(); }, 250));

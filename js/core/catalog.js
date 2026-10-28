@@ -47,7 +47,8 @@ export const PASOS = [
     { k: 'contactos', l: 'Más contactos', t: 'contactos', wide: true, help: 'Agrega a las personas que atienden cada área: dirección, tráfico, monitoreo, facturación, cobranza, etc.' }] },
   { id: 'operacion', titulo: 'Operación', sub: 'Servicios y cobertura', intro: 'Qué servicios ofreces, dónde operas y cómo monitoreas tus unidades.', campos: [
     { k: 'servicios', l: 'Tipo de servicio', t: 'multi', req: true, op: SERVICIOS, help: 'Marca todos los que ofreces. Según lo que elijas te pediremos los datos de flota, forwarder, almacenes o maniobras.' },
-    { k: 'cobertura', l: 'Cobertura nacional', t: 'multi', req: true, op: [TODA, ...ESTADOS_MX], help: 'Marca «Toda la República» o los estados donde operas.' },
+    { k: 'cobertura', l: 'Destinos con disponibilidad y regreso', t: 'multi', req: true, op: ESTADOS_MX,
+      help: 'Marca cada estado al que viajas y del que tienes regreso. No se acepta «Toda la República»: selecciona los destinos uno por uno.' },
     { k: 'centroamerica', l: 'Cobertura en Centroamérica', t: 'multi', op: CENTROAMERICA, help: 'Déjalo vacío si operas solo en México. Si marcas algún país se pedirá el permiso internacional.' },
     { k: 'sec_transporte', t: 'sec', l: 'Flota y monitoreo', s: 'Unidades de transporte', icon: 'truck', si: conTransporte },
     { k: 'unidades', l: 'Tipos de unidad', t: 'multi', req: true, op: UNIDADES, si: conTransporte },

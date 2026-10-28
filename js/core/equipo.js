@@ -1,8 +1,8 @@
 /* Operaciones del equipo interno (panel). Las reglas de Firestore limitan todo al personal activo. */
-import { fb, auth, db, CFG, COL, ref, col, getOne, getAll, where, now, newId, emulate, portalUrl, panelUrl, AppError } from './firebase.js?v=19';
-import { DOCS, ESTADOS, REVISION, ALERTAS, docLabel, requeridos, emailOk } from './catalog.js?v=19';
-import { enviar as enviarCorreo, reintentar as reintentarCorreo } from './mail.js?v=19';
-import { diasDesde, diasHasta } from './ui.js?v=19';
+import { fb, auth, db, CFG, COL, ref, col, getOne, getAll, where, now, newId, emulate, portalUrl, panelUrl, AppError } from './firebase.js?v=20';
+import { DOCS, ESTADOS, REVISION, ALERTAS, docLabel, requeridos, emailOk } from './catalog.js?v=20';
+import { enviar as enviarCorreo, reintentar as reintentarCorreo } from './mail.js?v=20';
+import { diasDesde, diasHasta } from './ui.js?v=20';
 
 const claveOk = (p) => String(p).length >= 10 && /[A-Za-z]/.test(p) && /\d/.test(p);
 const CLAVE_MSG = 'La contraseña debe tener al menos 10 caracteres, con letras y números.';
@@ -251,6 +251,18 @@ async function borrarEnLotes(refs) {
     await b.commit();
   }
 }
+/* Quita un contacto adicional del directorio (índice dentro de datos.contactos) y lo deja en el historial. */
+export async function quitarContacto(p, i) {
+  const lista = Array.isArray((p.datos || {}).contactos) ? p.datos.contactos.slice() : [];
+  if (i < 0 || i >= lista.length) throw new AppError('Ese contacto ya no existe; recarga la página.', 409);
+  const [quitado] = lista.splice(i, 1), t = now();
+  const b = fb.writeBatch(db);
+  b.update(ref(COL.prov, p.id), { 'datos.contactos': lista, actualizado_en: t });
+  b.set(ref(COL.prov, p.id, 'historial', newId()), { tipo: 'contacto', texto: 'Contacto quitado del directorio: ' + [quitado.nombre, quitado.area].filter(Boolean).join(' · '),
+    actor: yoCache ? yoCache.nombre : '', actor_tipo: 'equipo', creado_en: t });
+  await b.commit();
+}
+
 export async function borrarProveedor(p) {
   const refs = [];
   for (const d of await getAll(col(COL.prov, p.id, 'documentos'))) {
